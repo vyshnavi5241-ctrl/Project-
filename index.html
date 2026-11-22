@@ -3,26 +3,27 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Smart Pen Tremor Monitor</title>
+  <title>Smart Pen Tremor Dashboard</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <style>
-    body { font-family: system-ui, sans-serif; max-width: 900px; margin: 2rem auto; padding: 0 1rem; background: #f8f9fa; }
-    h1 { color: #1a1a2e; font-size: 1.5rem; }
-    .status { padding: 0.5rem 1rem; border-radius: 6px; margin-bottom: 1rem; font-size: 0.9rem; }
-    .status.connected { background: #d4edda; color: #155724; }
-    .status.error { background: #f8d7da; color: #721c24; }
-    .card { background: #fff; border-radius: 8px; padding: 1rem; margin-bottom: 1.5rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-    .card h2 { font-size: 1rem; color: #555; margin: 0 0 0.75rem 0; }
-    .stats { display: flex; gap: 2rem; flex-wrap: wrap; }
-    .stat { text-align: center; }
-    .stat .value { font-size: 1.8rem; font-weight: 700; color: #1a1a2e; }
-    .stat .label { font-size: 0.75rem; color: #888; text-transform: uppercase; }
-    canvas { max-height: 280px; }
+    body { font-family: system-ui, -apple-system, sans-serif; max-width: 900px; margin: 2rem auto; padding: 0 1rem; background: #f8f9fa; color: #333; }
+    h1 { color: #1a1a2e; font-size: 1.5rem; margin-bottom: 1rem; }
+    .status { padding: 0.75rem 1rem; border-radius: 6px; margin-bottom: 1.5rem; font-size: 0.9rem; font-weight: 500; }
+    .status.connected { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+    .status.error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+    .status.waiting { background: #fff3cd; color: #856404; border: 1px solid #ffeeba; }
+    .card { background: #fff; border-radius: 8px; padding: 1.5rem; margin-bottom: 1.5rem; box-shadow: 0 2px 5px rgba(0,0,0,0.05); border: 1px solid #eaeaea; }
+    .card h2 { font-size: 1.1rem; color: #444; margin: 0 0 1rem 0; border-bottom: 1px solid #eee; padding-bottom: 0.5rem; }
+    .stats { display: flex; justify-content: space-around; flex-wrap: wrap; gap: 1rem; }
+    .stat { text-align: center; background: #fdfdfd; padding: 1rem; border-radius: 6px; min-width: 100px; border: 1px solid #f0f0f0; }
+    .stat .value { font-size: 1.8rem; font-weight: 700; color: #e94560; }
+    .stat .label { font-size: 0.75rem; color: #888; text-transform: uppercase; margin-top: 0.25rem; letter-spacing: 0.5px; }
+    canvas { max-height: 300px; width: 100% !important; }
   </style>
 </head>
 <body>
   <h1>🖊️ Smart Pen Tremor Dashboard</h1>
-  <div id="status" class="status">Connecting to Firebase...</div>
+  <div id="status" class="status waiting">⏳ Connecting to Firebase...</div>
 
   <div class="card">
     <h2>Latest Reading</h2>
@@ -35,7 +36,7 @@
   </div>
 
   <div class="card">
-    <h2>Acceleration Magnitude Trend</h2>
+    <h2>Acceleration Magnitude Trend (Last 150 Records)</h2>
     <canvas id="trendChart"></canvas>
   </div>
 
@@ -43,6 +44,7 @@
     import { initializeApp } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-app.js";
     import { getDatabase, ref, onValue, query, limitToLast } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-database.js";
 
+    // Your Firebase configuration
     const firebaseConfig = {
       apiKey: "AIzaSyCMFhfjnGO4waR7Uata_jBeYAW8SqAKAp0",
       authDomain: "project-dfcc5.firebaseapp.com",
@@ -53,57 +55,87 @@
       appId: "1:999174035196:web:13fcac381ecbeeff9b6979"
     };
 
+    // Initialize Firebase
     const app = initializeApp(firebaseConfig);
     const db = getDatabase(app);
 
     const statusEl = document.getElementById('status');
     const chartCtx = document.getElementById('trendChart').getContext('2d');
 
+    // Initialize Chart.js
     let chart = new Chart(chartCtx, {
       type: 'line',
-      data: { labels: [], datasets: [{ label: '|A| (g)', data: [], borderColor: '#e94560', tension: 0.3, pointRadius: 0 }] },
+      data: { 
+        labels: [], 
+        datasets: [{ 
+          label: '|A| (g)', 
+          data: [], 
+          borderColor: '#e94560', 
+          backgroundColor: 'rgba(233, 69, 96, 0.1)',
+          borderWidth: 2,
+          tension: 0.3, 
+          pointRadius: 0,
+          fill: true
+        }] 
+      },
       options: {
-        responsive: true, maintainAspectRatio: false,
+        responsive: true, 
+        maintainAspectRatio: false,
         animation: false,
+        interaction: { mode: 'index', intersect: false },
         scales: {
           x: { display: false },
-          y: { beginAtZero: false, title: { display: true, text: 'Acceleration Magnitude (g)' } }
+          y: { 
+            beginAtZero: false, 
+            title: { display: true, text: 'Acceleration Magnitude (g)', font: { size: 12 } },
+            grid: { color: '#f0f0f0' }
+          }
         },
         plugins: { legend: { display: false } }
       }
     });
 
-    // Real-time listener on last 150 records
-    const recentRef = query(ref(db, 'tremor_readings'), limitToLast(150));
+    // Path MUST match the ESP32 code. In your latest ESP32 code, it is "/readings"
+    // If your ESP32 code still uses "/tremor_readings", change this path.
+    const DATA_PATH = 'readings'; 
+    const recentRef = query(ref(db, DATA_PATH), limitToLast(150));
 
+    // Listen for real-time updates
     onValue(recentRef, (snapshot) => {
-      statusEl.textContent = '✅ Connected — Live data streaming';
-      statusEl.className = 'status connected';
-
       const data = snapshot.val();
-      if (!data) { statusEl.textContent = '⚠️ Connected, waiting for data...'; return; }
+      
+      if (!data) { 
+        statusEl.textContent = '⚠️ Connected, but no data found. Is the ESP32 running?'; 
+        statusEl.className = 'status waiting';
+        return; 
+      }
 
+      // Convert Firebase object to sorted array
       const entries = Object.entries(data)
         .map(([key, v]) => ({ key, ...v }))
         .sort((a, b) => (a.ts || 0) - (b.ts || 0));
 
       if (entries.length === 0) return;
 
-      // Update latest stats
+      statusEl.textContent = '✅ Connected — Live data streaming';
+      statusEl.className = 'status connected';
+
+      // Update Latest Stats
       const latest = entries[entries.length - 1];
       document.getElementById('val-ax').textContent = latest.ax?.toFixed(2) ?? '--';
       document.getElementById('val-ay').textContent = latest.ay?.toFixed(2) ?? '--';
       document.getElementById('val-az').textContent = latest.az?.toFixed(2) ?? '--';
       document.getElementById('val-amag').textContent = latest.amag?.toFixed(3) ?? '--';
 
-      // Update chart
+      // Update Chart
       chart.data.labels = entries.map((_, i) => i);
       chart.data.datasets[0].data = entries.map(e => e.amag);
       chart.update('none');
     }, (error) => {
-      statusEl.textContent = '❌ Firebase error: ' + error.message;
+      // Handle Permission Denied or other errors
+      statusEl.textContent = '❌ Firebase Error: ' + error.message;
       statusEl.className = 'status error';
-      console.error(error);
+      console.error("Firebase Error Details:", error);
     });
   </script>
 </body>
