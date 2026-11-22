@@ -120,7 +120,7 @@
   <header>
     <div class="logo">🖊️ TremorSense <span>Pro</span></div>
     <div class="header-controls">
-      <button class="btn-export" onclick="exportToCSV()">⬇ Export CSV Data</button>
+      <button class="btn-export" onclick="exportToCSV()">⬇ Export Session Data (CSV)</button>
       <div id="status-badge" class="status-badge waiting">
         <div class="dot"></div>
         <span id="status-text">Connecting...</span>
@@ -136,15 +136,15 @@
         <div class="card-value" id="val-amag" style="color: var(--accent-blue);">-- <span class="card-unit">g</span></div>
       </div>
       <div class="card cyan">
-        <div class="card-title">Tremor Index (RMS)</div>
+        <div class="card-title" title="Root Mean Square of Acceleration">Tremor Index (RMS)</div>
         <div class="card-value" id="val-tsi">-- <span class="card-unit">g</span></div>
       </div>
       <div class="card purple">
-        <div class="card-title">Dominant Freq</div>
+        <div class="card-title" title="Estimated Dominant Frequency">Dominant Freq</div>
         <div class="card-value" id="val-freq">-- <span class="card-unit">Hz</span></div>
       </div>
       <div class="card warning">
-        <div class="card-title">Assessment Status</div>
+        <div class="card-title">Tremor Severity Assessment</div>
         <div class="card-value" id="val-severity" style="font-size: 1.6rem; margin-top: 8px;">
           <span class="badge">Waiting</span>
         </div>
@@ -154,7 +154,7 @@
     <!-- Middle Row: Chart -->
     <div class="card chart-card">
       <div class="card-title">
-        <span>Real-Time Tremor Amplitude</span>
+        <span>Real-Time Tremor Amplitude Trace</span>
         <span id="record-count" style="color: var(--text-muted); font-size: 0.75rem;">0 / 150 Records</span>
       </div>
       <div class="chart-container">
@@ -183,7 +183,7 @@
     import { initializeApp } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-app.js";
     import { getDatabase, ref, onValue, query, limitToLast } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-database.js";
 
-    // Firebase Config
+    // Firebase Configuration
     const firebaseConfig = {
       apiKey: "AIzaSyCMFhfjnGO4waR7Uata_jBeYAW8SqAKAp0",
       authDomain: "project-dfcc5.firebaseapp.com",
@@ -202,9 +202,9 @@
     const statusText = document.getElementById('status-text');
     const chartCtx = document.getElementById('trendChart').getContext('2d');
     
-    let globalData = []; // Store for CSV export
+    let globalData = []; // Store for CSV export & advanced calculations
 
-    // Chart.js Setup with Gradient
+    // Chart.js Setup
     let gradient = chartCtx.createLinearGradient(0, 0, 0, 400);
     gradient.addColorStop(0, 'rgba(59, 130, 246, 0.4)');
     gradient.addColorStop(1, 'rgba(59, 130, 246, 0.0)');
@@ -237,7 +237,7 @@
       }
     });
 
-    // Listen for Firebase Data
+    // Listen to Firebase Realtime Database
     const recentRef = query(ref(db, 'readings'), limitToLast(150));
 
     onValue(recentRef, (snapshot) => {
@@ -249,7 +249,7 @@
         return; 
       }
 
-      // Format and Sort Data
+      // Format and sort data chronologically
       globalData = Object.entries(data).map(([key, v]) => ({ key, ...v })).sort((a, b) => (a.ts || 0) - (b.ts || 0));
 
       if (globalData.length === 0) return;
@@ -259,7 +259,7 @@
 
       const latest = globalData[globalData.length - 1];
 
-      // 1. Update Basic Metrics
+      // 1. Update Basic Axis Metrics
       document.getElementById('val-amag').innerHTML = `${latest.amag?.toFixed(3) ?? '--'} <span class="card-unit">g</span>`;
       document.getElementById('val-ax').innerHTML = `${latest.ax?.toFixed(2) ?? '--'} <span class="card-unit">g</span>`;
       document.getElementById('val-ay').innerHTML = `${latest.ay?.toFixed(2) ?? '--'} <span class="card-unit">g</span>`;
@@ -271,41 +271,43 @@
       chart.data.datasets[0].data = globalData.map(e => e.amag);
       chart.update('none');
 
-      // 3. Calculate advanced metrics
+      // 3. Calculate AI/DSP Metrics
       calculateAdvancedMetrics(globalData);
     }, (error) => {
       statusText.textContent = 'Permission Denied';
       statusBadge.className = 'status-badge error';
     });
 
-    // AI / DSP Data Processing
+    // Feature: RMS Tremor Index & Dominant Frequency Estimation
     function calculateAdvancedMetrics(data) {
       if (data.length < 10) return;
 
       // A. Calculate Tremor Severity Index (RMS of acceleration)
+      // RMS = sqrt( sum(x^2) / N )
       let sumSq = 0;
       data.forEach(d => sumSq += (d.amag * d.amag));
       const rms = Math.sqrt(sumSq / data.length);
 
-      // B. Determine Severity Class
+      // B. Determine Severity Class based on RMS
       let severityHtml = `<span class="badge low">Low / Stable</span>`;
       if (rms > 1.25) severityHtml = `<span class="badge high">High Tremor</span>`;
-      else if (rms > 1.1) severityHtml = `<span class="badge moderate">Moderate</span>`;
+      else if (rms > 1.1) severityHtml = `<span class="badge moderate">Moderate Tremor</span>`;
 
       document.getElementById('val-tsi').innerHTML = `${rms.toFixed(3)} <span class="card-unit">g</span>`;
       document.getElementById('val-severity').innerHTML = severityHtml;
 
-      // C. Estimate Dominant Frequency (Simplified FFT via Zero-Crossings)
-      // Since the upload is ~2Hz (500ms interval), we can estimate frequency by counting peaks
+      // C. Estimate Dominant Frequency using Peak Detection
+      // Since ESP32 uploads every 500ms, we can count peaks to estimate Hz.
       let peaks = 0;
-      let threshold = 0.05; // minimum noise threshold
+      const threshold = 0.05; // Minimum amplitude change to count as a peak (noise filter)
+      
       for (let i = 1; i < data.length - 1; i++) {
         if (data[i].amag > data[i-1].amag + threshold && data[i].amag > data[i+1].amag + threshold) {
           peaks++;
         }
       }
       
-      // Calculate session duration in seconds (based on millis from ESP32)
+      // Calculate session duration in seconds based on ESP32 timestamps (millis)
       let timeDiffMs = data[data.length - 1].ts - data[0].ts;
       let timeDiffSec = timeDiffMs / 1000.0;
       
@@ -314,13 +316,13 @@
         freq = peaks / timeDiffSec;
       }
       
-      // Clamp frequency to realistic physiological tremor range (2 - 12 Hz) for display purposes
+      // Clamp frequency to realistic physiological tremor range (2 - 12 Hz) for display
       if (freq > 12) freq = freq % 12; 
       
       document.getElementById('val-freq').innerHTML = `${freq.toFixed(1)} <span class="card-unit">Hz</span>`;
     }
 
-    // CSV Export Feature
+    // Feature: Export to CSV for Longitudinal Monitoring
     window.exportToCSV = function() {
       if (globalData.length === 0) {
         alert("No data available to export.");
@@ -328,8 +330,10 @@
       }
 
       let csvContent = "data:text/csv;charset=utf-8,";
+      // Header row
       csvContent += "Timestamp(ms),Accel X(g),Accel Y(g),Accel Z(g),Magnitude(g),Gyro X(dps),Gyro Y(dps),Gyro Z(dps)\n";
 
+      // Data rows
       globalData.forEach(function(rowArray) {
         let row = [
           rowArray.ts,
@@ -339,10 +343,11 @@
         csvContent += row + "\n";
       });
 
+      // Trigger Download
       const encodedUri = encodeURI(csvContent);
       const link = document.createElement("a");
       link.setAttribute("href", encodedUri);
-      link.setAttribute("download", `tremor_session_${Date.now()}.csv`);
+      link.setAttribute("download", `tremor_session_${new Date().toISOString().slice(0,19).replace(/:/g, "-")}.csv`);
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
