@@ -11,7 +11,7 @@
     :root {
       --bg-base: #0b1120;
       --bg-card: #151e32;
-      --bg-glass: rgba(21, 30, 50, 0.7);
+      --bg-glass: rgba(21, 30, 50, 0.8);
       --text-main: #f1f5f9;
       --text-muted: #94a3b8;
       --accent-blue: #3b82f6;
@@ -51,7 +51,19 @@
     .logo { display: flex; align-items: center; gap: 12px; font-size: 1.25rem; font-weight: 700; letter-spacing: -0.5px;}
     .logo span { color: var(--accent-cyan); }
     
-    .header-controls { display: flex; align-items: center; gap: 1rem; }
+    .header-controls { display: flex; align-items: center; gap: 1.5rem; }
+
+    /* Big Download Button */
+    .btn-export {
+      background: linear-gradient(135deg, #10b981, #059669);
+      color: white; border: none;
+      padding: 10px 24px; border-radius: 8px; font-size: 0.95rem; font-weight: 700; cursor: pointer;
+      display: flex; align-items: center; gap: 10px; transition: all 0.2s;
+      box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+      text-transform: uppercase; letter-spacing: 0.5px;
+    }
+    .btn-export:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(16, 185, 129, 0.5); }
+    .btn-export:active { transform: translateY(0); }
 
     .status-badge {
       display: flex; align-items: center; gap: 8px;
@@ -64,13 +76,6 @@
     
     .dot { width: 8px; height: 8px; background: currentColor; border-radius: 50%; animation: pulse 2s infinite; }
     @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(16,185,129,0.4); } 70% { box-shadow: 0 0 0 8px rgba(16,185,129,0); } 100% { box-shadow: 0 0 0 0 rgba(16,185,129,0); } }
-
-    .btn-export {
-      background: var(--border); color: var(--text-main); border: none;
-      padding: 8px 16px; border-radius: 6px; font-size: 0.85rem; font-weight: 600; cursor: pointer;
-      display: flex; align-items: center; gap: 8px; transition: 0.2s;
-    }
-    .btn-export:hover { background: var(--accent-blue); }
 
     /* Main Layout */
     main { padding: 2rem; max-width: 1400px; margin: 0 auto; display: flex; flex-direction: column; gap: 1.5rem; }
@@ -98,11 +103,10 @@
     .badge.moderate { background: rgba(245, 158, 11, 0.2); color: var(--warning); }
     .badge.high { background: rgba(239, 68, 68, 0.2); color: var(--danger); }
 
-    /* Chart Area */
-    .chart-card { min-height: 420px; display: flex; flex-direction: column; }
+    /* Chart Areas */
+    .chart-card { min-height: 350px; display: flex; flex-direction: column; }
     .chart-container { flex: 1; position: relative; width: 100%; margin-top: 1rem; }
 
-    /* Grid for Secondary Stats */
     .grid-bottom { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem; }
 
     @media (max-width: 1024px) {
@@ -120,7 +124,10 @@
   <header>
     <div class="logo">🖊️ TremorSense <span>Pro</span></div>
     <div class="header-controls">
-      <button class="btn-export" onclick="exportToCSV()">⬇ Export Session Data (CSV)</button>
+      <button class="btn-export" onclick="exportToCSV()">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+        Download Clinical CSV
+      </button>
       <div id="status-badge" class="status-badge waiting">
         <div class="dot"></div>
         <span id="status-text">Connecting...</span>
@@ -144,25 +151,36 @@
         <div class="card-value" id="val-freq">-- <span class="card-unit">Hz</span></div>
       </div>
       <div class="card warning">
-        <div class="card-title">Tremor Severity Assessment</div>
+        <div class="card-title">Tremor Severity</div>
         <div class="card-value" id="val-severity" style="font-size: 1.6rem; margin-top: 8px;">
           <span class="badge">Waiting</span>
         </div>
       </div>
     </div>
 
-    <!-- Middle Row: Chart -->
+    <!-- Real-time Graph -->
     <div class="card chart-card">
       <div class="card-title">
-        <span>Real-Time Tremor Amplitude Trace</span>
+        <span>Real-Time Amplitude Trace (Live)</span>
         <span id="record-count" style="color: var(--text-muted); font-size: 0.75rem;">0 / 150 Records</span>
       </div>
       <div class="chart-container">
-        <canvas id="trendChart"></canvas>
+        <canvas id="realtimeChart"></canvas>
       </div>
     </div>
 
-    <!-- Bottom Row: Detailed Axis Data -->
+    <!-- Full Historical Graph -->
+    <div class="card chart-card" style="min-height: 400px;">
+      <div class="card-title">
+        <span>Full Session History (All 150 Records)</span>
+        <span style="color: var(--text-muted); font-size: 0.75rem;">For Clinical Review</span>
+      </div>
+      <div class="chart-container">
+        <canvas id="historyChart"></canvas>
+      </div>
+    </div>
+
+    <!-- Detailed Axis Data -->
     <div class="grid-bottom">
       <div class="card">
         <div class="card-title">Accelerometer X</div>
@@ -183,7 +201,6 @@
     import { initializeApp } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-app.js";
     import { getDatabase, ref, onValue, query, limitToLast } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-database.js";
 
-    // Firebase Configuration
     const firebaseConfig = {
       apiKey: "AIzaSyCMFhfjnGO4waR7Uata_jBeYAW8SqAKAp0",
       authDomain: "project-dfcc5.firebaseapp.com",
@@ -197,61 +214,52 @@
     const app = initializeApp(firebaseConfig);
     const db = getDatabase(app);
 
-    // UI Elements
     const statusBadge = document.getElementById('status-badge');
     const statusText = document.getElementById('status-text');
-    const chartCtx = document.getElementById('trendChart').getContext('2d');
     
-    let globalData = []; // Store for CSV export & advanced calculations
+    let globalData = []; 
+    let currentRms = 0;
+    let currentFreq = 0;
 
-    // Chart.js Setup
-    let gradient = chartCtx.createLinearGradient(0, 0, 0, 400);
-    gradient.addColorStop(0, 'rgba(59, 130, 246, 0.4)');
-    gradient.addColorStop(1, 'rgba(59, 130, 246, 0.0)');
+    // Chart 1: Real-Time (Smooth, gradient fill)
+    const rtCtx = document.getElementById('realtimeChart').getContext('2d');
+    let rtGradient = rtCtx.createLinearGradient(0, 0, 0, 400);
+    rtGradient.addColorStop(0, 'rgba(59, 130, 246, 0.4)');
+    rtGradient.addColorStop(1, 'rgba(59, 130, 246, 0.0)');
 
-    let chart = new Chart(chartCtx, {
+    let realtimeChart = new Chart(rtCtx, {
       type: 'line',
-      data: { 
-        labels: [], 
-        datasets: [{ 
-          label: '|A| (g)', data: [], 
-          borderColor: '#3b82f6', backgroundColor: gradient,
-          borderWidth: 2, tension: 0.4, pointRadius: 0, fill: true
-        }] 
-      },
+      data: { labels: [], datasets: [{ label: '|A| (g)', data: [], borderColor: '#3b82f6', backgroundColor: rtGradient, borderWidth: 2, tension: 0.4, pointRadius: 0, fill: true }] },
       options: {
         responsive: true, maintainAspectRatio: false, animation: false,
-        interaction: { mode: 'index', intersect: false },
-        scales: {
-          x: { display: false },
-          y: { 
-            grid: { color: 'rgba(255, 255, 255, 0.05)' },
-            ticks: { color: '#94a3b8' },
-            title: { display: true, text: 'Acceleration Magnitude (g)', color: '#94a3b8' }
-          }
-        },
-        plugins: { 
-          legend: { display: false },
-          tooltip: { backgroundColor: '#151e32', titleColor: '#f1f5f9', bodyColor: '#3b82f6', borderColor: '#27354f', borderWidth: 1 }
-        }
+        scales: { x: { display: false }, y: { grid: { color: 'rgba(255, 255, 255, 0.05)' }, ticks: { color: '#94a3b8' } } },
+        plugins: { legend: { display: false } }
       }
     });
 
-    // Listen to Firebase Realtime Database
+    // Chart 2: History (Spiky, clinical view of all data)
+    const histCtx = document.getElementById('historyChart').getContext('2d');
+    let historyChart = new Chart(histCtx, {
+      type: 'line',
+      data: { labels: [], datasets: [{ label: '|A| (g)', data: [], borderColor: '#8b5cf6', backgroundColor: 'transparent', borderWidth: 1.5, tension: 0, pointRadius: 2, pointBackgroundColor: '#8b5cf6' }] },
+      options: {
+        responsive: true, maintainAspectRatio: false, animation: false,
+        scales: { 
+          x: { grid: { color: 'rgba(255, 255, 255, 0.05)' }, ticks: { color: '#94a3b8', maxTicksLimit: 10 }, title: { display: true, text: 'Record Number', color: '#94a3b8' } }, 
+          y: { grid: { color: 'rgba(255, 255, 255, 0.05)' }, ticks: { color: '#94a3b8' }, title: { display: true, text: 'Magnitude (g)', color: '#94a3b8' } } 
+        },
+        plugins: { legend: { display: false } }
+      }
+    });
+
+    // Firebase Listener
     const recentRef = query(ref(db, 'readings'), limitToLast(150));
 
     onValue(recentRef, (snapshot) => {
       const data = snapshot.val();
-      
-      if (!data) { 
-        statusText.textContent = 'Waiting for Data'; 
-        statusBadge.className = 'status-badge waiting';
-        return; 
-      }
+      if (!data) return;
 
-      // Format and sort data chronologically
       globalData = Object.entries(data).map(([key, v]) => ({ key, ...v })).sort((a, b) => (a.ts || 0) - (b.ts || 0));
-
       if (globalData.length === 0) return;
 
       statusText.textContent = 'Live Session Active';
@@ -259,70 +267,58 @@
 
       const latest = globalData[globalData.length - 1];
 
-      // 1. Update Basic Axis Metrics
+      // Update Values
       document.getElementById('val-amag').innerHTML = `${latest.amag?.toFixed(3) ?? '--'} <span class="card-unit">g</span>`;
       document.getElementById('val-ax').innerHTML = `${latest.ax?.toFixed(2) ?? '--'} <span class="card-unit">g</span>`;
       document.getElementById('val-ay').innerHTML = `${latest.ay?.toFixed(2) ?? '--'} <span class="card-unit">g</span>`;
       document.getElementById('val-az').innerHTML = `${latest.az?.toFixed(2) ?? '--'} <span class="card-unit">g</span>`;
       document.getElementById('record-count').textContent = `${globalData.length} / 150 Records`;
 
-      // 2. Update Chart
-      chart.data.labels = globalData.map((_, i) => i);
-      chart.data.datasets[0].data = globalData.map(e => e.amag);
-      chart.update('none');
+      // Update Both Charts
+      const labels = globalData.map((_, i) => i);
+      const values = globalData.map(e => e.amag);
 
-      // 3. Calculate AI/DSP Metrics
+      realtimeChart.data.labels = labels;
+      realtimeChart.data.datasets[0].data = values;
+      realtimeChart.update('none');
+
+      historyChart.data.labels = labels;
+      historyChart.data.datasets[0].data = values;
+      historyChart.update('none');
+
       calculateAdvancedMetrics(globalData);
-    }, (error) => {
-      statusText.textContent = 'Permission Denied';
-      statusBadge.className = 'status-badge error';
     });
 
-    // Feature: RMS Tremor Index & Dominant Frequency Estimation
     function calculateAdvancedMetrics(data) {
       if (data.length < 10) return;
 
-      // A. Calculate Tremor Severity Index (RMS of acceleration)
-      // RMS = sqrt( sum(x^2) / N )
+      // 1. RMS Calculation
       let sumSq = 0;
       data.forEach(d => sumSq += (d.amag * d.amag));
-      const rms = Math.sqrt(sumSq / data.length);
+      currentRms = Math.sqrt(sumSq / data.length);
 
-      // B. Determine Severity Class based on RMS
       let severityHtml = `<span class="badge low">Low / Stable</span>`;
-      if (rms > 1.25) severityHtml = `<span class="badge high">High Tremor</span>`;
-      else if (rms > 1.1) severityHtml = `<span class="badge moderate">Moderate Tremor</span>`;
+      if (currentRms > 1.25) severityHtml = `<span class="badge high">High Tremor</span>`;
+      else if (currentRms > 1.1) severityHtml = `<span class="badge moderate">Moderate Tremor</span>`;
 
-      document.getElementById('val-tsi').innerHTML = `${rms.toFixed(3)} <span class="card-unit">g</span>`;
+      document.getElementById('val-tsi').innerHTML = `${currentRms.toFixed(3)} <span class="card-unit">g</span>`;
       document.getElementById('val-severity').innerHTML = severityHtml;
 
-      // C. Estimate Dominant Frequency using Peak Detection
-      // Since ESP32 uploads every 500ms, we can count peaks to estimate Hz.
+      // 2. Frequency Calculation
       let peaks = 0;
-      const threshold = 0.05; // Minimum amplitude change to count as a peak (noise filter)
-      
+      const threshold = 0.05; 
       for (let i = 1; i < data.length - 1; i++) {
-        if (data[i].amag > data[i-1].amag + threshold && data[i].amag > data[i+1].amag + threshold) {
-          peaks++;
-        }
+        if (data[i].amag > data[i-1].amag + threshold && data[i].amag > data[i+1].amag + threshold) peaks++;
       }
+      let timeDiffSec = (data[data.length - 1].ts - data[0].ts) / 1000.0;
       
-      // Calculate session duration in seconds based on ESP32 timestamps (millis)
-      let timeDiffMs = data[data.length - 1].ts - data[0].ts;
-      let timeDiffSec = timeDiffMs / 1000.0;
+      currentFreq = timeDiffSec > 0 ? (peaks / timeDiffSec) : 0;
+      if (currentFreq > 12) currentFreq = currentFreq % 12; 
       
-      let freq = 0;
-      if (timeDiffSec > 0) {
-        freq = peaks / timeDiffSec;
-      }
-      
-      // Clamp frequency to realistic physiological tremor range (2 - 12 Hz) for display
-      if (freq > 12) freq = freq % 12; 
-      
-      document.getElementById('val-freq').innerHTML = `${freq.toFixed(1)} <span class="card-unit">Hz</span>`;
+      document.getElementById('val-freq').innerHTML = `${currentFreq.toFixed(1)} <span class="card-unit">Hz</span>`;
     }
 
-    // Feature: Export to CSV for Longitudinal Monitoring
+    // CSV Export with Clinical Header
     window.exportToCSV = function() {
       if (globalData.length === 0) {
         alert("No data available to export.");
@@ -330,10 +326,18 @@
       }
 
       let csvContent = "data:text/csv;charset=utf-8,";
-      // Header row
+      
+      // Clinical Session Summary
+      csvContent += "--- CLINICAL TREMOR REPORT ---\n";
+      csvContent += `Session Date,${new Date().toLocaleString()}\n`;
+      csvContent += `Total Records,${globalData.length}\n`;
+      csvContent += `Tremor Index (RMS),${currentRms.toFixed(3)} g\n`;
+      csvContent += `Dominant Frequency,${currentFreq.toFixed(1)} Hz\n`;
+      csvContent += "------------------------------\n\n";
+
+      // Raw Data
       csvContent += "Timestamp(ms),Accel X(g),Accel Y(g),Accel Z(g),Magnitude(g),Gyro X(dps),Gyro Y(dps),Gyro Z(dps)\n";
 
-      // Data rows
       globalData.forEach(function(rowArray) {
         let row = [
           rowArray.ts,
@@ -343,11 +347,10 @@
         csvContent += row + "\n";
       });
 
-      // Trigger Download
       const encodedUri = encodeURI(csvContent);
       const link = document.createElement("a");
       link.setAttribute("href", encodedUri);
-      link.setAttribute("download", `tremor_session_${new Date().toISOString().slice(0,19).replace(/:/g, "-")}.csv`);
+      link.setAttribute("download", `tremor_session_${new Date().toISOString().slice(0,10)}.csv`);
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
