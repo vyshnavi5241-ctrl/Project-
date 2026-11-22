@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>TremorSense Pro | Clinical Dashboard</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js"></script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
@@ -107,6 +108,15 @@
     .chart-card { min-height: 350px; display: flex; flex-direction: column; }
     .chart-container { flex: 1; position: relative; width: 100%; margin-top: 1rem; }
 
+    .ai-card { border: 1px solid rgba(6,182,212,.35); background: linear-gradient(135deg, rgba(6,182,212,.10), rgba(139,92,246,.08)); }
+    .ai-card::before { background: linear-gradient(90deg, var(--accent-cyan), var(--accent-purple)); }
+    .ai-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+    .ai-label { font-size: .78rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; }
+    .ai-prediction { font-size: 1.7rem; font-weight: 700; margin-top: .4rem; }
+    .ai-confidence { color: var(--accent-cyan); font-size: 1.05rem; font-weight: 700; }
+    .ai-note { color: var(--text-muted); font-size: .75rem; margin-top: .9rem; line-height: 1.5; }
+    .ai-bar-wrap { width: 100%; height: 9px; border-radius: 10px; background: rgba(255,255,255,.08); margin-top: .6rem; overflow: hidden; }
+    .ai-bar { height: 100%; width: 0%; background: linear-gradient(90deg, var(--accent-cyan), var(--accent-purple)); border-radius: 10px; transition: width .35s; }
     .grid-bottom { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem; }
 
     @media (max-width: 1024px) {
@@ -157,6 +167,25 @@
         </div>
       </div>
     </div>
+
+
+    <!-- AI Tremor Classification Panel -->
+    <div class="card ai-card">
+      <div class="ai-row">
+        <div>
+          <div class="ai-label">TensorFlow.js AI Classification</div>
+          <div class="ai-prediction" id="ai-prediction">Training model...</div>
+        </div>
+        <div style="text-align:right">
+          <div class="ai-label">Prediction confidence</div>
+          <div class="ai-confidence" id="ai-confidence">--%</div>
+        </div>
+      </div>
+      <div class="ai-bar-wrap"><div class="ai-bar" id="ai-confidence-bar"></div></div>
+      <div class="ai-note" id="ai-model-status">Preparing neural network and feature extraction...</div>
+      <div class="ai-note">Prototype classifier trained using synthetic feature examples. Not a medical diagnosis or validated clinical model.</div>
+    </div>
+
 
     <!-- Real-time Graph -->
     <div class="card chart-card">
@@ -220,6 +249,83 @@
     let globalData = []; 
     let currentRms = 0;
     let currentFreq = 0;
+    let aiModel = null;
+    let aiPredictionLabel = 'Model not ready';
+    let aiConfidence = 0;
+    const AI_CLASSES = ['Stable / Low Activity', 'Mild Tremor Pattern', 'Moderate Tremor Pattern', 'High Tremor Pattern'];
+
+    // Train a demonstration neural network using synthetic feature samples.
+    // Replace this synthetic training set with clinically labeled data for research validation.
+    function randomBetween(min, max) { return min + Math.random() * (max - min); }
+    function makeSyntheticTrainingData(samplesPerClass = 300) {
+      const xs = [], ys = [];
+      const ranges = [
+        // [RMS g, peak-rate Hz, magnitude variability g, axis variability g, gyro RMS dps]
+        [[0.75,1.02],[0.1,2.0],[0.02,0.15],[0.02,0.15],[0,15]],
+        [[1.00,1.20],[2.0,4.0],[0.12,0.32],[0.10,0.30],[10,65]],
+        [[1.15,1.40],[4.0,7.0],[0.25,0.55],[0.25,0.60],[45,140]],
+        [[1.35,1.85],[6.5,11.5],[0.45,0.95],[0.45,1.00],[100,280]]
+      ];
+      ranges.forEach((classRanges, classIndex) => {
+        for (let i = 0; i < samplesPerClass; i++) {
+          const raw = classRanges.map(r => randomBetween(r[0], r[1]));
+          xs.push([raw[0]/2, raw[1]/12, raw[2]/1, raw[3]/1, raw[4]/300]);
+          ys.push(classIndex);
+        }
+      });
+      return { xs, ys };
+    }
+    async function trainDemoModel() {
+      const { xs, ys } = makeSyntheticTrainingData();
+      const inputTensor = tf.tensor2d(xs);
+      const labelsTensor = tf.tensor1d(ys, 'int32');
+          const outputTensor = tf.oneHot(labelsTensor, 4);
+      const model = tf.sequential();
+      model.add(tf.layers.dense({ inputShape: [5], units: 16, activation: 'relu' }));
+      model.add(tf.layers.dropout({ rate: 0.12 }));
+      model.add(tf.layers.dense({ units: 8, activation: 'relu' }));
+      model.add(tf.layers.dense({ units: 4, activation: 'softmax' }));
+      model.compile({ optimizer: tf.train.adam(0.008), loss: 'categoricalCrossentropy', metrics: ['accuracy'] });
+      await model.fit(inputTensor, outputTensor, { epochs: 18, batchSize: 32, shuffle: true, verbose: 0 });
+      inputTensor.dispose(); labelsTensor.dispose(); outputTensor.dispose();
+      aiModel = model;
+      document.getElementById('ai-model-status').textContent = 'AI model trained in-browser. Waiting for sufficient live sensor records.';
+      return model;
+    }
+    function extractAiFeatures(data, rmsValue, freqValue) {
+      const mags = data.map(d => Number(d.amag) || 0);
+      const mean = mags.reduce((s,v) => s+v, 0) / (mags.length || 1);
+      const variance = mags.reduce((s,v) => s + Math.pow(v-mean,2), 0) / (mags.length || 1);
+      const magStd = Math.sqrt(variance);
+      const axisVariability = ['ax','ay','az'].map(k => {
+        const vals = data.map(d => Number(d[k]) || 0);
+        const m = vals.reduce((s,v)=>s+v,0)/(vals.length||1);
+        return Math.sqrt(vals.reduce((s,v)=>s+Math.pow(v-m,2),0)/(vals.length||1));
+      }).reduce((s,v)=>s+v,0)/3;
+      const gyroVals = data.flatMap(d => [Number(d.gx)||0, Number(d.gy)||0, Number(d.gz)||0]);
+      const gyroRms = Math.sqrt(gyroVals.reduce((s,v)=>s+v*v,0)/(gyroVals.length||1));
+      return [Math.min(Math.max(rmsValue/2,0),1), Math.min(Math.max(freqValue/12,0),1), Math.min(Math.max(magStd,0),1), Math.min(Math.max(axisVariability,0),1), Math.min(Math.max(gyroRms/300,0),1)];
+    }
+    async function predictAi(data, rmsValue, freqValue) {
+      if (!aiModel || data.length < 10) return;
+      const features = extractAiFeatures(data, rmsValue, freqValue);
+      const input = tf.tensor2d([features]);
+      const output = aiModel.predict(input);
+      const probs = Array.from(await output.data());
+      input.dispose(); output.dispose();
+      const bestIndex = probs.indexOf(Math.max(...probs));
+      aiPredictionLabel = AI_CLASSES[bestIndex];
+      aiConfidence = probs[bestIndex] * 100;
+      document.getElementById('ai-prediction').textContent = aiPredictionLabel;
+      document.getElementById('ai-confidence').textContent = aiConfidence.toFixed(1) + '%';
+      document.getElementById('ai-confidence-bar').style.width = aiConfidence.toFixed(1) + '%';
+      document.getElementById('ai-model-status').textContent = 'Features: RMS ' + rmsValue.toFixed(3) + ' g | Peak rate ' + freqValue.toFixed(2) + ' Hz | Mag SD ' + features[2].toFixed(3) + ' | Axis SD ' + features[3].toFixed(3) + ' | Gyro RMS ' + (features[4]*300).toFixed(1) + ' dps';
+    }
+    trainDemoModel().catch(err => {
+      console.error('AI model training failed:', err);
+      document.getElementById('ai-prediction').textContent = 'AI unavailable';
+      document.getElementById('ai-model-status').textContent = 'TensorFlow.js failed to train. Check browser support or network connection.';
+    });
 
     // Chart 1: Real-Time (Smooth, gradient fill)
     const rtCtx = document.getElementById('realtimeChart').getContext('2d');
@@ -297,12 +403,8 @@
       data.forEach(d => sumSq += (d.amag * d.amag));
       currentRms = Math.sqrt(sumSq / data.length);
 
-      let severityHtml = `<span class="badge low">Low / Stable</span>`;
-      if (currentRms > 1.25) severityHtml = `<span class="badge high">High Tremor</span>`;
-      else if (currentRms > 1.1) severityHtml = `<span class="badge moderate">Moderate Tremor</span>`;
-
       document.getElementById('val-tsi').innerHTML = `${currentRms.toFixed(3)} <span class="card-unit">g</span>`;
-      document.getElementById('val-severity').innerHTML = severityHtml;
+      document.getElementById('val-severity').innerHTML = `<span class="badge">AI Pending</span>`;
 
       // 2. Frequency Calculation
       let peaks = 0;
@@ -316,6 +418,12 @@
       if (currentFreq > 12) currentFreq = currentFreq % 12; 
       
       document.getElementById('val-freq').innerHTML = `${currentFreq.toFixed(1)} <span class="card-unit">Hz</span>`;
+      predictAi(data, currentRms, currentFreq).then(() => {
+        let badgeClass = 'low';
+        if (aiPredictionLabel.includes('High')) badgeClass = 'high';
+        else if (aiPredictionLabel.includes('Moderate')) badgeClass = 'moderate';
+        document.getElementById('val-severity').innerHTML = `<span class="badge ${badgeClass}">${aiPredictionLabel}</span>`;
+      }).catch(console.error);
     }
 
     // CSV Export with Clinical Header
@@ -333,6 +441,8 @@
       csvContent += `Total Records,${globalData.length}\n`;
       csvContent += `Tremor Index (RMS),${currentRms.toFixed(3)} g\n`;
       csvContent += `Dominant Frequency,${currentFreq.toFixed(1)} Hz\n`;
+      csvContent += `AI Classification,${aiPredictionLabel}\n`;
+      csvContent += `AI Confidence,${aiConfidence.toFixed(1)}%\n`;
       csvContent += "------------------------------\n\n";
 
       // Raw Data
