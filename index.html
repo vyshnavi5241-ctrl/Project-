@@ -69,6 +69,7 @@
       border: 1px solid rgba(16, 185, 129, 0.2); transition: 0.3s;
     }
     .status-badge.waiting { background: rgba(245, 158, 11, 0.1); color: var(--warning); border-color: rgba(245, 158, 11, 0.2); }
+    .status-badge.error { background: rgba(239, 68, 68, 0.1); color: var(--danger); border-color: rgba(239, 68, 68, 0.2); }
     
     .dot { width: 8px; height: 8px; background: currentColor; border-radius: 50%; animation: pulse 2s infinite; }
     @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(16,185,129,0.4); } 70% { box-shadow: 0 0 0 8px rgba(16,185,129,0); } 100% { box-shadow: 0 0 0 0 rgba(16,185,129,0); } }
@@ -102,7 +103,6 @@
     .chart-card { min-height: 350px; display: flex; flex-direction: column; }
     .chart-container { flex: 1; position: relative; width: 100%; margin-top: 1rem; }
 
-    /* AI Panel */
     .ai-prediction { font-size: 1.5rem; font-weight: 700; color: #fff; margin-top: 10px; }
     .ai-confidence { font-size: 0.9rem; color: var(--text-muted); margin-top: 5px; }
     .progress-bar { width: 100%; height: 8px; background: #27354f; border-radius: 4px; margin-top: 15px; overflow: hidden; }
@@ -135,7 +135,6 @@
   </header>
 
   <main>
-    <!-- Top Metrics -->
     <div class="grid-top">
       <div class="card blue">
         <div class="card-title">Magnitude |A|</div>
@@ -157,9 +156,7 @@
       </div>
     </div>
 
-    <!-- AI Analysis Row -->
     <div class="grid-ai">
-      <!-- AI Prediction Card -->
       <div class="card ai">
         <div class="card-title">AI Clinical Classification</div>
         <div class="ai-prediction" id="ai-result">Analyzing waveform...</div>
@@ -170,7 +167,6 @@
         </div>
       </div>
 
-      <!-- Real-time Graph -->
       <div class="card chart-card">
         <div class="card-title">
           <span>Real-Time Amplitude Trace</span>
@@ -182,7 +178,6 @@
       </div>
     </div>
 
-    <!-- Full History Graph -->
     <div class="card chart-card" style="min-height: 400px;">
       <div class="card-title">
         <span>Full Session History (For Clinical Review)</span>
@@ -193,7 +188,6 @@
     </div>
   </main>
 
-  <!-- Import Machine Learning Library -->
   <script src="https://cdn.jsdelivr.net/npm/ml-knn@1.0.0/dist/ml-knn.min.js"></script>
 
   <script type="module">
@@ -220,7 +214,6 @@
     let currentRms = 0;
     let currentFreq = 0;
 
-    // Chart.js Setup (Same as before)
     const rtCtx = document.getElementById('realtimeChart').getContext('2d');
     let rtGradient = rtCtx.createLinearGradient(0, 0, 0, 400);
     rtGradient.addColorStop(0, 'rgba(59, 130, 246, 0.4)');
@@ -239,27 +232,23 @@
       options: { responsive: true, maintainAspectRatio: false, animation: false, scales: { x: { display: true, ticks: { color: '#94a3b8' } }, y: { grid: { color: 'rgba(255, 255, 255, 0.05)' }, ticks: { color: '#94a3b8' } } }, plugins: { legend: { display: false } } }
     });
 
-    // ==========================================
-    // MACHINE LEARNING AI (KNN) TRAINING
-    // ==========================================
-    // Feature Set: [RMS, Dominant Frequency (Hz)]
-    // Labels: 0 = Healthy/Resting, 1 = Essential Tremor, 2 = Parkinsonian Tremor
-    
     const trainingFeatures = [
-      [1.001, 1.0], [1.005, 2.0], [1.010, 1.5], [1.002, 3.0], // Class 0 (Healthy: ~1g RMS, low freq)
-      [1.150, 5.5], [1.200, 6.0], [1.180, 4.5], [1.250, 7.0], // Class 1 (Essential: 1.1-1.3g RMS, 4-7 Hz)
-      [1.350, 4.5], [1.400, 5.0], [1.300, 3.5], [1.450, 6.0]  // Class 2 (Parkinsonian: >1.3g RMS, 3-6 Hz)
+      [1.001, 1.0], [1.005, 2.0], [1.010, 1.5], [1.002, 3.0],
+      [1.150, 5.5], [1.200, 6.0], [1.180, 4.5], [1.250, 7.0],
+      [1.350, 4.5], [1.400, 5.0], [1.300, 3.5], [1.450, 6.0]
     ];
     const trainingLabels = [0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2];
     const knn = new KNN(trainingFeatures, trainingLabels, { k: 3 });
-
-    // ==========================================
 
     const recentRef = query(ref(db, 'readings'), limitToLast(150));
 
     onValue(recentRef, (snapshot) => {
       const data = snapshot.val();
-      if (!data) return;
+      if (!data) {
+        statusText.textContent = 'Waiting for data...';
+        statusBadge.className = 'status-badge waiting';
+        return;
+      }
 
       globalData = Object.entries(data).map(([key, v]) => ({ key, ...v })).sort((a, b) => (a.ts || 0) - (b.ts || 0));
       if (globalData.length === 0) return;
@@ -271,21 +260,22 @@
       document.getElementById('val-amag').innerHTML = `${latest.amag?.toFixed(3) ?? '--'} <span class="card-unit">g</span>`;
       document.getElementById('record-count').textContent = `${globalData.length} / 150 Records`;
 
-      // Update Charts
       const labels = globalData.map((_, i) => i);
       const values = globalData.map(e => e.amag);
       realtimeChart.data.labels = labels; realtimeChart.data.datasets[0].data = values; realtimeChart.update('none');
       historyChart.data.labels = labels; historyChart.data.datasets[0].data = values; historyChart.update('none');
 
-      // Run DSP and AI
       if (globalData.length >= 10) {
         calculateDSP(globalData);
         runAI();
       }
+    }, (error) => {
+        statusText.textContent = 'Permission Denied';
+        statusBadge.className = 'status-badge error';
+        console.error(error);
     });
 
     function calculateDSP(data) {
-      // 1. RMS
       let sumSq = 0;
       data.forEach(d => sumSq += (d.amag * d.amag));
       currentRms = Math.sqrt(sumSq / data.length);
@@ -296,7 +286,6 @@
       document.getElementById('val-tsi').innerHTML = `${currentRms.toFixed(3)} <span class="card-unit">g</span>`;
       document.getElementById('val-severity').innerHTML = severityHtml;
 
-      // 2. Frequency (Zero-Crossing / Peak detection)
       let peaks = 0;
       const threshold = 0.05; 
       for (let i = 1; i < data.length - 1; i++) {
@@ -308,20 +297,13 @@
       document.getElementById('val-freq').innerHTML = `${currentFreq.toFixed(1)} <span class="card-unit">Hz</span>`;
     }
 
-    // AI Inference Function
     function runAI() {
       const inputFeatures = [currentRms, currentFreq];
-      
-      // Predict using KNN
       const prediction = knn.predict(inputFeatures);
-      
-      // Calculate Confidence (Distance-based approximation)
       const neighbors = knn.kNearestNeighbors(inputFeatures, 3);
       const distances = neighbors.map(n => n.distance);
       const minDist = Math.min(...distances);
       
-      // Convert distance to confidence percentage (closer neighbors = higher confidence)
-      // Max distance is capped at 10 for normalization
       let confidence = Math.max(0, 100 - (minDist * 10)); 
       if (confidence > 99) confidence = 99;
 
@@ -332,20 +314,18 @@
       confEl.textContent = `${confidence.toFixed(0)}%`;
       progressEl.style.width = `${confidence}%`;
 
-      // Map labels to clinical text
       if (currentRms < 1.05) {
         resultEl.textContent = "Healthy / Resting State";
-        resultEl.style.color = "#10b981"; // Green
+        resultEl.style.color = "#10b981";
       } else if (prediction === 1) {
         resultEl.textContent = "Essential Tremor Detected";
-        resultEl.style.color = "#f59e0b"; // Yellow
+        resultEl.style.color = "#f59e0b";
       } else if (prediction === 2) {
         resultEl.textContent = "Parkinsonian Tremor Profile";
-        resultEl.style.color = "#ef4444"; // Red
+        resultEl.style.color = "#ef4444";
       }
     }
 
-    // Export to CSV
     window.exportToCSV = function() {
       if (globalData.length === 0) return;
 
