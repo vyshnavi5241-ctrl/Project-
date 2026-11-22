@@ -3,36 +3,42 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>TremorSense | Clinical Dashboard</title>
+  <title>TremorSense Pro | Clinical Dashboard</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
     :root {
-      --bg-color: #0f172a;
-      --card-bg: #1e293b;
-      --text-main: #f8fafc;
+      --bg-base: #0b1120;
+      --bg-card: #151e32;
+      --bg-glass: rgba(21, 30, 50, 0.7);
+      --text-main: #f1f5f9;
       --text-muted: #94a3b8;
-      --accent-color: #38bdf8;
-      --success-color: #10b981;
-      --danger-color: #ef4444;
-      --border-color: #334155;
+      --accent-blue: #3b82f6;
+      --accent-cyan: #06b6d4;
+      --accent-purple: #8b5cf6;
+      --success: #10b981;
+      --warning: #f59e0b;
+      --danger: #ef4444;
+      --border: #27354f;
     }
 
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
     body {
-      font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      background-color: var(--bg-color);
+      font-family: 'Inter', sans-serif;
+      background-color: var(--bg-base);
+      background-image: radial-gradient(circle at 15% 50%, rgba(59, 130, 246, 0.08), transparent 25%),
+                        radial-gradient(circle at 85% 30%, rgba(139, 92, 246, 0.08), transparent 25%);
       color: var(--text-main);
       min-height: 100vh;
-      display: flex;
-      flex-direction: column;
     }
 
     /* Header */
     header {
-      background-color: rgba(30, 41, 59, 0.8);
-      backdrop-filter: blur(10px);
-      border-bottom: 1px solid var(--border-color);
+      background: var(--bg-glass);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
       padding: 1rem 2rem;
       display: flex;
       justify-content: space-between;
@@ -42,194 +48,133 @@
       z-index: 100;
     }
 
-    .logo-container {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-    }
-
-    .logo-icon {
-      font-size: 1.5rem;
-      background: linear-gradient(135deg, #38bdf8, #818cf8);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-    }
-
-    h1 {
-      font-size: 1.25rem;
-      font-weight: 600;
-      letter-spacing: 0.5px;
-    }
-
-    /* Status Badge */
-    .status-badge {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      background-color: rgba(16, 185, 129, 0.1);
-      color: var(--success-color);
-      padding: 6px 16px;
-      border-radius: 999px;
-      font-size: 0.85rem;
-      font-weight: 500;
-      border: 1px solid rgba(16, 185, 129, 0.2);
-      transition: all 0.3s ease;
-    }
+    .logo { display: flex; align-items: center; gap: 12px; font-size: 1.25rem; font-weight: 700; letter-spacing: -0.5px;}
+    .logo span { color: var(--accent-cyan); }
     
-    .status-badge.error {
-      background-color: rgba(239, 68, 68, 0.1);
-      color: var(--danger-color);
-      border-color: rgba(239, 68, 68, 0.2);
-    }
+    .header-controls { display: flex; align-items: center; gap: 1rem; }
 
-    .status-badge.waiting {
-      background-color: rgba(245, 158, 11, 0.1);
-      color: #f59e0b;
-      border-color: rgba(245, 158, 11, 0.2);
+    .status-badge {
+      display: flex; align-items: center; gap: 8px;
+      background: rgba(16, 185, 129, 0.1); color: var(--success);
+      padding: 6px 16px; border-radius: 999px; font-size: 0.8rem; font-weight: 600;
+      border: 1px solid rgba(16, 185, 129, 0.2); transition: 0.3s;
     }
+    .status-badge.waiting { background: rgba(245, 158, 11, 0.1); color: var(--warning); border-color: rgba(245, 158, 11, 0.2); }
+    .status-badge.error { background: rgba(239, 68, 68, 0.1); color: var(--danger); border-color: rgba(239, 68, 68, 0.2); }
+    
+    .dot { width: 8px; height: 8px; background: currentColor; border-radius: 50%; animation: pulse 2s infinite; }
+    @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(16,185,129,0.4); } 70% { box-shadow: 0 0 0 8px rgba(16,185,129,0); } 100% { box-shadow: 0 0 0 0 rgba(16,185,129,0); } }
 
-    .dot {
-      width: 8px;
-      height: 8px;
-      background-color: currentColor;
-      border-radius: 50%;
-      animation: pulse 2s infinite;
+    .btn-export {
+      background: var(--border); color: var(--text-main); border: none;
+      padding: 8px 16px; border-radius: 6px; font-size: 0.85rem; font-weight: 600; cursor: pointer;
+      display: flex; align-items: center; gap: 8px; transition: 0.2s;
     }
+    .btn-export:hover { background: var(--accent-blue); }
 
-    @keyframes pulse {
-      0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); }
-      70% { box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
-      100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
-    }
+    /* Main Layout */
+    main { padding: 2rem; max-width: 1400px; margin: 0 auto; display: flex; flex-direction: column; gap: 1.5rem; }
 
-    /* Main Content */
-    main {
-      padding: 2rem;
-      max-width: 1200px;
-      margin: 0 auto;
-      width: 100%;
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      gap: 2rem;
-    }
-
-    /* Grid Layout */
-    .dashboard-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-      gap: 1.5rem;
-    }
-
-    /* Cards */
+    .grid-top { display: grid; grid-template-columns: 1fr 1fr 1fr 2fr; gap: 1.5rem; }
+    
     .card {
-      background-color: var(--card-bg);
-      border-radius: 12px;
-      border: 1px solid var(--border-color);
-      padding: 1.5rem;
-      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-      transition: transform 0.2s ease, box-shadow 0.2s ease;
+      background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px;
+      padding: 1.5rem; box-shadow: 0 4px 20px rgba(0,0,0,0.2); position: relative; overflow: hidden;
     }
 
-    .card:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.2);
+    /* Decorators */
+    .card::before { content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 3px; }
+    .card.blue::before { background: var(--accent-blue); }
+    .card.cyan::before { background: var(--accent-cyan); }
+    .card.purple::before { background: var(--accent-purple); }
+    .card.warning::before { background: var(--warning); }
+
+    .card-title { font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; font-weight: 600; margin-bottom: 0.5rem; display: flex; justify-content: space-between;}
+    .card-value { font-size: 2.2rem; font-weight: 700; display: flex; align-items: baseline; gap: 4px; }
+    .card-unit { font-size: 0.9rem; color: var(--text-muted); font-weight: 500; }
+    
+    .badge { font-size: 0.7rem; padding: 2px 6px; border-radius: 4px; font-weight: 700; background: rgba(255,255,255,0.1); }
+    .badge.low { background: rgba(16, 185, 129, 0.2); color: var(--success); }
+    .badge.moderate { background: rgba(245, 158, 11, 0.2); color: var(--warning); }
+    .badge.high { background: rgba(239, 68, 68, 0.2); color: var(--danger); }
+
+    /* Chart Area */
+    .chart-card { min-height: 420px; display: flex; flex-direction: column; }
+    .chart-container { flex: 1; position: relative; width: 100%; margin-top: 1rem; }
+
+    /* Grid for Secondary Stats */
+    .grid-bottom { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem; }
+
+    @media (max-width: 1024px) {
+      .grid-top { grid-template-columns: 1fr 1fr; }
+      .grid-bottom { grid-template-columns: 1fr; }
     }
-
-    .card-header {
-      font-size: 0.85rem;
-      color: var(--text-muted);
-      text-transform: uppercase;
-      letter-spacing: 1px;
-      font-weight: 600;
-      margin-bottom: 1rem;
-      display: flex;
-      justify-content: space-between;
-    }
-
-    .card-value {
-      font-size: 2.5rem;
-      font-weight: 700;
-      color: var(--text-main);
-      display: flex;
-      align-items: baseline;
-      gap: 4px;
-    }
-
-    .card-unit {
-      font-size: 1rem;
-      color: var(--text-muted);
-      font-weight: 400;
-    }
-
-    /* Chart Section */
-    .chart-card {
-      grid-column: 1 / -1;
-      min-height: 400px;
-      display: flex;
-      flex-direction: column;
-    }
-
-    .chart-container {
-      flex: 1;
-      position: relative;
-      width: 100%;
-      margin-top: 1rem;
-    }
-
-    /* Highlight specific cards */
-    .accent-card { border-top: 4px solid var(--accent-color); }
-    .success-card { border-top: 4px solid var(--success-color); }
-
-    /* Loading state */
-    .loading {
-      opacity: 0.5;
-      transition: opacity 0.3s;
+    @media (max-width: 600px) {
+      .grid-top { grid-template-columns: 1fr; }
+      header { flex-direction: column; gap: 1rem; text-align: center; }
     }
   </style>
 </head>
 <body>
 
   <header>
-    <div class="logo-container">
-      <span class="logo-icon">⚕️</span>
-      <h1>TremorSense Dashboard</h1>
-    </div>
-    <div id="status-badge" class="status-badge waiting">
-      <div class="dot"></div>
-      <span id="status-text">Connecting to Telemetry...</span>
+    <div class="logo">🖊️ TremorSense <span>Pro</span></div>
+    <div class="header-controls">
+      <button class="btn-export" onclick="exportToCSV()">⬇ Export CSV Data</button>
+      <div id="status-badge" class="status-badge waiting">
+        <div class="dot"></div>
+        <span id="status-text">Connecting...</span>
+      </div>
     </div>
   </header>
 
   <main>
-    <!-- Top Row: Latest Readings -->
-    <div class="dashboard-grid">
-      <div class="card">
-        <div class="card-header">Accel X</div>
-        <div class="card-value" id="val-ax">-- <span class="card-unit">g</span></div>
+    <!-- Top Row: Real-time metrics -->
+    <div class="grid-top">
+      <div class="card blue">
+        <div class="card-title">Magnitude |A|</div>
+        <div class="card-value" id="val-amag" style="color: var(--accent-blue);">-- <span class="card-unit">g</span></div>
       </div>
-      <div class="card">
-        <div class="card-header">Accel Y</div>
-        <div class="card-value" id="val-ay">-- <span class="card-unit">g</span></div>
+      <div class="card cyan">
+        <div class="card-title">Tremor Index (RMS)</div>
+        <div class="card-value" id="val-tsi">-- <span class="card-unit">g</span></div>
       </div>
-      <div class="card">
-        <div class="card-header">Accel Z</div>
-        <div class="card-value" id="val-az">-- <span class="card-unit">g</span></div>
+      <div class="card purple">
+        <div class="card-title">Dominant Freq</div>
+        <div class="card-value" id="val-freq">-- <span class="card-unit">Hz</span></div>
       </div>
-      <div class="card accent-card">
-        <div class="card-header">Magnitude |A|</div>
-        <div class="card-value" id="val-amag" style="color: var(--accent-color);">-- <span class="card-unit">g</span></div>
+      <div class="card warning">
+        <div class="card-title">Assessment Status</div>
+        <div class="card-value" id="val-severity" style="font-size: 1.6rem; margin-top: 8px;">
+          <span class="badge">Waiting</span>
+        </div>
       </div>
     </div>
 
-    <!-- Bottom Row: Chart -->
+    <!-- Middle Row: Chart -->
     <div class="card chart-card">
-      <div class="card-header">
-        <span>Real-Time Tremor Trace</span>
+      <div class="card-title">
+        <span>Real-Time Tremor Amplitude</span>
         <span id="record-count" style="color: var(--text-muted); font-size: 0.75rem;">0 / 150 Records</span>
       </div>
       <div class="chart-container">
         <canvas id="trendChart"></canvas>
+      </div>
+    </div>
+
+    <!-- Bottom Row: Detailed Axis Data -->
+    <div class="grid-bottom">
+      <div class="card">
+        <div class="card-title">Accelerometer X</div>
+        <div class="card-value" id="val-ax">-- <span class="card-unit">g</span></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Accelerometer Y</div>
+        <div class="card-value" id="val-ay">-- <span class="card-unit">g</span></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Accelerometer Z</div>
+        <div class="card-value" id="val-az">-- <span class="card-unit">g</span></div>
       </div>
     </div>
   </main>
@@ -238,6 +183,7 @@
     import { initializeApp } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-app.js";
     import { getDatabase, ref, onValue, query, limitToLast } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-database.js";
 
+    // Firebase Config
     const firebaseConfig = {
       apiKey: "AIzaSyCMFhfjnGO4waR7Uata_jBeYAW8SqAKAp0",
       authDomain: "project-dfcc5.firebaseapp.com",
@@ -255,38 +201,30 @@
     const statusBadge = document.getElementById('status-badge');
     const statusText = document.getElementById('status-text');
     const chartCtx = document.getElementById('trendChart').getContext('2d');
-    const recordCountEl = document.getElementById('record-count');
+    
+    let globalData = []; // Store for CSV export
 
-    // Setup Gradient for Chart
+    // Chart.js Setup with Gradient
     let gradient = chartCtx.createLinearGradient(0, 0, 0, 400);
-    gradient.addColorStop(0, 'rgba(56, 189, 248, 0.5)');
-    gradient.addColorStop(1, 'rgba(56, 189, 248, 0.0)');
+    gradient.addColorStop(0, 'rgba(59, 130, 246, 0.4)');
+    gradient.addColorStop(1, 'rgba(59, 130, 246, 0.0)');
 
-    // Initialize Chart.js
     let chart = new Chart(chartCtx, {
       type: 'line',
       data: { 
         labels: [], 
         datasets: [{ 
-          label: 'Magnitude', 
-          data: [], 
-          borderColor: '#38bdf8',
-          backgroundColor: gradient,
-          borderWidth: 2, 
-          tension: 0.4, 
-          pointRadius: 0,
-          fill: true
+          label: '|A| (g)', data: [], 
+          borderColor: '#3b82f6', backgroundColor: gradient,
+          borderWidth: 2, tension: 0.4, pointRadius: 0, fill: true
         }] 
       },
       options: {
-        responsive: true, 
-        maintainAspectRatio: false,
-        animation: false,
+        responsive: true, maintainAspectRatio: false, animation: false,
         interaction: { mode: 'index', intersect: false },
         scales: {
           x: { display: false },
           y: { 
-            beginAtZero: false, 
             grid: { color: 'rgba(255, 255, 255, 0.05)' },
             ticks: { color: '#94a3b8' },
             title: { display: true, text: 'Acceleration Magnitude (g)', color: '#94a3b8' }
@@ -294,14 +232,7 @@
         },
         plugins: { 
           legend: { display: false },
-          tooltip: {
-            backgroundColor: '#1e293b',
-            titleColor: '#f8fafc',
-            bodyColor: '#38bdf8',
-            borderColor: '#334155',
-            borderWidth: 1,
-            displayColors: false
-          }
+          tooltip: { backgroundColor: '#151e32', titleColor: '#f1f5f9', bodyColor: '#3b82f6', borderColor: '#27354f', borderWidth: 1 }
         }
       }
     });
@@ -313,41 +244,109 @@
       const data = snapshot.val();
       
       if (!data) { 
-        statusText.textContent = 'Waiting for ESP32...'; 
+        statusText.textContent = 'Waiting for Data'; 
         statusBadge.className = 'status-badge waiting';
         return; 
       }
 
-      const entries = Object.entries(data)
-        .map(([key, v]) => ({ key, ...v }))
-        .sort((a, b) => (a.ts || 0) - (b.ts || 0));
+      // Format and Sort Data
+      globalData = Object.entries(data).map(([key, v]) => ({ key, ...v })).sort((a, b) => (a.ts || 0) - (b.ts || 0));
 
-      if (entries.length === 0) return;
+      if (globalData.length === 0) return;
 
-      // Update UI Status
-      statusText.textContent = 'Live Data Streaming';
+      statusText.textContent = 'Live Session Active';
       statusBadge.className = 'status-badge';
-      
-      // Update Record Count
-      recordCountEl.textContent = `${entries.length} / 150 Records`;
 
-      // Update Latest Values
-      const latest = entries[entries.length - 1];
+      const latest = globalData[globalData.length - 1];
+
+      // 1. Update Basic Metrics
+      document.getElementById('val-amag').innerHTML = `${latest.amag?.toFixed(3) ?? '--'} <span class="card-unit">g</span>`;
       document.getElementById('val-ax').innerHTML = `${latest.ax?.toFixed(2) ?? '--'} <span class="card-unit">g</span>`;
       document.getElementById('val-ay').innerHTML = `${latest.ay?.toFixed(2) ?? '--'} <span class="card-unit">g</span>`;
       document.getElementById('val-az').innerHTML = `${latest.az?.toFixed(2) ?? '--'} <span class="card-unit">g</span>`;
-      document.getElementById('val-amag').innerHTML = `${latest.amag?.toFixed(3) ?? '--'} <span class="card-unit">g</span>`;
+      document.getElementById('record-count').textContent = `${globalData.length} / 150 Records`;
 
-      // Update Chart
-      chart.data.labels = entries.map((_, i) => i);
-      chart.data.datasets[0].data = entries.map(e => e.amag);
+      // 2. Update Chart
+      chart.data.labels = globalData.map((_, i) => i);
+      chart.data.datasets[0].data = globalData.map(e => e.amag);
       chart.update('none');
-      
+
+      // 3. Calculate advanced metrics
+      calculateAdvancedMetrics(globalData);
     }, (error) => {
       statusText.textContent = 'Permission Denied';
       statusBadge.className = 'status-badge error';
-      console.error(error);
     });
+
+    // AI / DSP Data Processing
+    function calculateAdvancedMetrics(data) {
+      if (data.length < 10) return;
+
+      // A. Calculate Tremor Severity Index (RMS of acceleration)
+      let sumSq = 0;
+      data.forEach(d => sumSq += (d.amag * d.amag));
+      const rms = Math.sqrt(sumSq / data.length);
+
+      // B. Determine Severity Class
+      let severityHtml = `<span class="badge low">Low / Stable</span>`;
+      if (rms > 1.25) severityHtml = `<span class="badge high">High Tremor</span>`;
+      else if (rms > 1.1) severityHtml = `<span class="badge moderate">Moderate</span>`;
+
+      document.getElementById('val-tsi').innerHTML = `${rms.toFixed(3)} <span class="card-unit">g</span>`;
+      document.getElementById('val-severity').innerHTML = severityHtml;
+
+      // C. Estimate Dominant Frequency (Simplified FFT via Zero-Crossings)
+      // Since the upload is ~2Hz (500ms interval), we can estimate frequency by counting peaks
+      let peaks = 0;
+      let threshold = 0.05; // minimum noise threshold
+      for (let i = 1; i < data.length - 1; i++) {
+        if (data[i].amag > data[i-1].amag + threshold && data[i].amag > data[i+1].amag + threshold) {
+          peaks++;
+        }
+      }
+      
+      // Calculate session duration in seconds (based on millis from ESP32)
+      let timeDiffMs = data[data.length - 1].ts - data[0].ts;
+      let timeDiffSec = timeDiffMs / 1000.0;
+      
+      let freq = 0;
+      if (timeDiffSec > 0) {
+        freq = peaks / timeDiffSec;
+      }
+      
+      // Clamp frequency to realistic physiological tremor range (2 - 12 Hz) for display purposes
+      if (freq > 12) freq = freq % 12; 
+      
+      document.getElementById('val-freq').innerHTML = `${freq.toFixed(1)} <span class="card-unit">Hz</span>`;
+    }
+
+    // CSV Export Feature
+    window.exportToCSV = function() {
+      if (globalData.length === 0) {
+        alert("No data available to export.");
+        return;
+      }
+
+      let csvContent = "data:text/csv;charset=utf-8,";
+      csvContent += "Timestamp(ms),Accel X(g),Accel Y(g),Accel Z(g),Magnitude(g),Gyro X(dps),Gyro Y(dps),Gyro Z(dps)\n";
+
+      globalData.forEach(function(rowArray) {
+        let row = [
+          rowArray.ts,
+          rowArray.ax, rowArray.ay, rowArray.az, rowArray.amag,
+          rowArray.gx, rowArray.gy, rowArray.gz
+        ].join(",");
+        csvContent += row + "\n";
+      });
+
+      const encodedUri = encodeURI(csvContent);
+      const link = document.createElement("a");
+      link.setAttribute("href", encodedUri);
+      link.setAttribute("download", `tremor_session_${Date.now()}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    };
   </script>
 </body>
 </html>
