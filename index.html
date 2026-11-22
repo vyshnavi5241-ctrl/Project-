@@ -162,9 +162,6 @@
         <div class="ai-prediction" id="ai-result">Analyzing waveform...</div>
         <div class="ai-confidence">Model Confidence: <span id="ai-confidence">0%</span></div>
         <div class="progress-bar"><div class="progress-fill" id="ai-progress"></div></div>
-        <div style="margin-top: 15px; font-size: 0.75rem; color: var(--text-muted); line-height: 1.4;">
-          <strong>How it works:</strong> The browser extracts time-domain features (RMS, peak-to-peak) and frequency-domain features (Zero-Crossing Rate) and feeds them into a K-Nearest Neighbors (KNN) ML classifier trained on standard clinical tremor parameters.
-        </div>
       </div>
 
       <div class="card chart-card">
@@ -214,6 +211,7 @@
     let currentRms = 0;
     let currentFreq = 0;
 
+    // Charts
     const rtCtx = document.getElementById('realtimeChart').getContext('2d');
     let rtGradient = rtCtx.createLinearGradient(0, 0, 0, 400);
     rtGradient.addColorStop(0, 'rgba(59, 130, 246, 0.4)');
@@ -232,27 +230,29 @@
       options: { responsive: true, maintainAspectRatio: false, animation: false, scales: { x: { display: true, ticks: { color: '#94a3b8' } }, y: { grid: { color: 'rgba(255, 255, 255, 0.05)' }, ticks: { color: '#94a3b8' } } }, plugins: { legend: { display: false } } }
     });
 
-    const trainingFeatures = [
-      [1.001, 1.0], [1.005, 2.0], [1.010, 1.5], [1.002, 3.0],
-      [1.150, 5.5], [1.200, 6.0], [1.180, 4.5], [1.250, 7.0],
-      [1.350, 4.5], [1.400, 5.0], [1.300, 3.5], [1.450, 6.0]
-    ];
+    // KNN AI
+    const trainingFeatures = [[1.001, 1.0], [1.005, 2.0], [1.010, 1.5], [1.002, 3.0], [1.150, 5.5], [1.200, 6.0], [1.180, 4.5], [1.250, 7.0], [1.350, 4.5], [1.400, 5.0], [1.300, 3.5], [1.450, 6.0]];
     const trainingLabels = [0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2];
     const knn = new KNN(trainingFeatures, trainingLabels, { k: 3 });
 
+    // FIREBASE LISTENER
     const recentRef = query(ref(db, 'readings'), limitToLast(150));
 
     onValue(recentRef, (snapshot) => {
       const data = snapshot.val();
+      
       if (!data) {
-        statusText.textContent = 'Waiting for data...';
+        statusText.textContent = 'Connected, but no data found';
         statusBadge.className = 'status-badge waiting';
         return;
       }
 
+      // Sort data by timestamp
       globalData = Object.entries(data).map(([key, v]) => ({ key, ...v })).sort((a, b) => (a.ts || 0) - (b.ts || 0));
+
       if (globalData.length === 0) return;
 
+      // Update Status to Green
       statusText.textContent = 'Live Session Active';
       statusBadge.className = 'status-badge';
 
@@ -262,6 +262,7 @@
 
       const labels = globalData.map((_, i) => i);
       const values = globalData.map(e => e.amag);
+      
       realtimeChart.data.labels = labels; realtimeChart.data.datasets[0].data = values; realtimeChart.update('none');
       historyChart.data.labels = labels; historyChart.data.datasets[0].data = values; historyChart.update('none');
 
@@ -270,9 +271,10 @@
         runAI();
       }
     }, (error) => {
-        statusText.textContent = 'Permission Denied';
-        statusBadge.className = 'status-badge error';
-        console.error(error);
+      // IF FIREBASE BLOCKS US, THIS WILL TRIGGER
+      statusText.textContent = 'Error: ' + error.message;
+      statusBadge.className = 'status-badge error';
+      console.error(error);
     });
 
     function calculateDSP(data) {
@@ -308,11 +310,8 @@
       if (confidence > 99) confidence = 99;
 
       const resultEl = document.getElementById('ai-result');
-      const confEl = document.getElementById('ai-confidence');
-      const progressEl = document.getElementById('ai-progress');
-
-      confEl.textContent = `${confidence.toFixed(0)}%`;
-      progressEl.style.width = `${confidence}%`;
+      document.getElementById('ai-confidence').textContent = `${confidence.toFixed(0)}%`;
+      document.getElementById('ai-progress').style.width = `${confidence}%`;
 
       if (currentRms < 1.05) {
         resultEl.textContent = "Healthy / Resting State";
@@ -330,29 +329,21 @@
       if (globalData.length === 0) return;
 
       let csvContent = "data:text/csv;charset=utf-8,";
-      csvContent += "--- AI CLINICAL TREMOR REPORT ---\n";
-      csvContent += `Session Date,${new Date().toLocaleString()}\n`;
+      csvContent += `--- AI CLINICAL TREMOR REPORT ---\n`;
       csvContent += `Tremor Index (RMS),${currentRms.toFixed(3)} g\n`;
       csvContent += `Dominant Frequency,${currentFreq.toFixed(1)} Hz\n`;
       csvContent += `AI Classification,${document.getElementById('ai-result').textContent}\n`;
-      csvContent += `AI Confidence,${document.getElementById('ai-confidence').textContent}\n`;
       csvContent += "------------------------------\n\n";
-
       csvContent += "Timestamp(ms),Accel X(g),Accel Y(g),Accel Z(g),Magnitude(g),Gyro X(dps),Gyro Y(dps),Gyro Z(dps)\n";
 
       globalData.forEach(function(rowArray) {
-        let row = [
-          rowArray.ts,
-          rowArray.ax, rowArray.ay, rowArray.az, rowArray.amag,
-          rowArray.gx, rowArray.gy, rowArray.gz
-        ].join(",");
+        let row = [rowArray.ts, rowArray.ax, rowArray.ay, rowArray.az, rowArray.amag, rowArray.gx, rowArray.gy, rowArray.gz].join(",");
         csvContent += row + "\n";
       });
 
-      const encodedUri = encodeURI(csvContent);
       const link = document.createElement("a");
-      link.setAttribute("href", encodedUri);
-      link.setAttribute("download", `ai_tremor_report_${new Date().toISOString().slice(0,10)}.csv`);
+      link.setAttribute("href", encodeURI(csvContent));
+      link.setAttribute("download", `tremor_report.csv`);
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
