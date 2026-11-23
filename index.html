@@ -322,7 +322,7 @@
 
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-app.js";
-    import { getDatabase, ref, onValue, query, limitToLast, set, get, child } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-database.js";
+    import { getDatabase, ref, onValue, query, limitToLast, set, get } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-database.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyCMFhfjnGO4waR7Uata_jBeYAW8SqAKAp0",
@@ -353,7 +353,10 @@
     let patients = []; 
     let previousSession = null; 
     let patientUnsubscribe = null;
-    let liveDataUnsubscribe = null; // For the main hardware live data
+    let liveDataUnsubscribe = null; 
+    
+    // 🟢 NEW: Keep track of when the patient was selected. We only show data after this time.
+    let sessionStartTime = 0; 
 
     // ---------- PATIENT MANAGEMENT ----------
     const patientSelect = document.getElementById('patient-select');
@@ -425,6 +428,7 @@
 
     async function selectPatient(patient) {
       if (patientUnsubscribe) { patientUnsubscribe(); patientUnsubscribe = null; }
+      if (liveDataUnsubscribe) { liveDataUnsubscribe(); liveDataUnsubscribe = null; }
       
       currentPatient = patient;
       noPatientMsg.style.display = 'none';
@@ -432,9 +436,15 @@
       activePatientName.textContent = patient.name;
       activePatientId.textContent = `#${patient.id}`;
 
+      // 🟢 Set the session start time to NOW. Only data timestamped after this will be shown.
+      sessionStartTime = Date.now();
+
+      // Clear current screen immediately
+      globalData = [];
+      resetDashboard();
+
       await loadPreviousSession(patient);
-      startPatientListener(patient);
-      startMainLiveDataListener(patient); // Read from the root 'readings' node
+      startMainLiveDataListener(patient); 
     }
 
     function clearPatient() {
@@ -533,28 +543,8 @@
       }
     }
 
-    // Reads previously saved data for the selected patient
-    function startPatientListener(patient) {
-      const key = patientKey(patient.name, patient.id);
-      const readingsRef = query(ref(db, `readings/${key}`), limitToLast(150));
-
-      patientUnsubscribe = onValue(readingsRef, (snapshot) => {
-        const data = snapshot.val();
-        if (!data) {
-          // If no historical patient data exists yet, we don't clear the live data
-          // The live data will populate the UI.
-          return;
-        }
-        // If there is historical data, we could optionally merge it or display it.
-        // For now, the mainLiveDataListener will take over the UI.
-      }, (error) => {
-        console.error('Firebase read error for patient history:', error);
-      });
-    }
-
     // Reads the LIVE data coming directly from the pen under 'readings/'
     function startMainLiveDataListener(patient) {
-      const key = patientKey(patient.name, patient.id);
       const mainReadingsRef = query(ref(db, 'readings'), limitToLast(150));
 
       liveDataUnsubscribe = onValue(mainReadingsRef, (snapshot) => {
@@ -567,13 +557,22 @@
           return;
         }
 
-        // Data structure handling
+        // 🟢 CRITICAL CHANGE: Filter data. Only keep readings that happened AFTER the patient was selected.
         globalData = Object.entries(data)
-          .filter(([k, v]) => v && typeof v === 'object' && v.amag !== undefined) // Ensure it's a reading object
+          .filter(([k, v]) => {
+            if (!v || typeof v !== 'object' || v.amag === undefined) return false;
+            // Check if the timestamp of this reading is greater than or equal to sessionStartTime
+            return v.ts && v.ts >= sessionStartTime;
+          })
           .map(([k, v]) => ({ key: k, ...v }))
           .sort((a, b) => (a.ts || 0) - (b.ts || 0));
 
-        if (globalData.length === 0) return;
+        if (globalData.length === 0) {
+          // If no new data yet, just wait
+          statusText.textContent = 'Waiting for Pen to Start...';
+          statusBadge.className = 'status-badge waiting';
+          return;
+        }
 
         statusText.textContent = 'Live Session Active';
         statusBadge.className = 'status-badge';
@@ -762,14 +761,14 @@
       }).catch(console.error);
     }
 
-    // ---------- CSV EXPORT (patient-specific) ----------
+    // ---------- CSV EXPORT ----------
     window.exportToCSV = function() {
       if (!currentPatient) {
         alert("Please select a patient first.");
         return;
       }
       if (globalData.length === 0) {
-        alert("No data available to export for this patient.");
+        alert("No new data available to export for this session.");
         return;
       }
 
@@ -814,11 +813,10 @@
       link.click();
       document.body.removeChild(link);
 
-      // Save to Firebase under the patient's specific node
+      // 🟢 Save this new session's data permanently to the patient's specific folder
       const key = patientKey(currentPatient.name, currentPatient.id);
       globalData.forEach(async (row) => {
         if (!row.key) return; 
-        // Move the live data to the patient's specific folder
         await set(ref(db, `readings/${key}/${row.key}`), {
           ts: row.ts, ax: row.ax, ay: row.ay, az: row.az, amag: row.amag,
           gx: row.gx, gy: row.gy, gz: row.gz
