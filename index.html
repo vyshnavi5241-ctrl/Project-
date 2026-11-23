@@ -322,7 +322,7 @@
 
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-app.js";
-    import { getDatabase, ref, onValue, query, limitToLast, set, get, child } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-database.js";
+    import { getDatabase, ref, onValue, query, limitToLast, set, get } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-database.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyCMFhfjnGO4waR7Uata_jBeYAW8SqAKAp0",
@@ -352,7 +352,6 @@
     let currentPatient = null; // { name, id }
     let patients = []; // [{ name, id }]
     let previousSession = null; // { rms, freq, aiLabel, aiConfidence, date }
-    let patientDataListener = null;
     let patientUnsubscribe = null;
 
     // ---------- PATIENT MANAGEMENT ----------
@@ -408,7 +407,6 @@
       patientNameInput.value = '';
       patientIdInput.value = '';
       await loadPatients();
-      // Auto-select the new patient
       patientSelect.value = key;
       onPatientChange();
     };
@@ -425,7 +423,6 @@
     };
 
     async function selectPatient(patient) {
-      // Unsubscribe previous listener
       if (patientUnsubscribe) { patientUnsubscribe(); patientUnsubscribe = null; }
       
       currentPatient = patient;
@@ -434,10 +431,7 @@
       activePatientName.textContent = patient.name;
       activePatientId.textContent = `#${patient.id}`;
 
-      // Load previous session summary
       await loadPreviousSession(patient);
-
-      // Start listening to this patient's readings
       startPatientListener(patient);
     }
 
@@ -530,7 +524,6 @@
       };
       try {
         await set(ref(db, `sessions/${key}/${sessionId}`), sessionSummary);
-        // Update previousSession reference so comparison refreshes
         await loadPreviousSession(patient);
       } catch(e) {
         console.warn('Could not save session summary:', e);
@@ -544,7 +537,6 @@
       patientUnsubscribe = onValue(readingsRef, (snapshot) => {
         const data = snapshot.val();
         if (!data) {
-          // No data yet for this patient — reset but keep patient selected
           globalData = [];
           resetDashboard();
           statusText.textContent = 'Waiting for Data';
@@ -560,14 +552,12 @@
 
         const latest = globalData[globalData.length - 1];
 
-        // Update Values
         document.getElementById('val-amag').innerHTML = `${latest.amag?.toFixed(3) ?? '--'} <span class="card-unit">g</span>`;
         document.getElementById('val-ax').innerHTML = `${latest.ax?.toFixed(2) ?? '--'} <span class="card-unit">g</span>`;
         document.getElementById('val-ay').innerHTML = `${latest.ay?.toFixed(2) ?? '--'} <span class="card-unit">g</span>`;
         document.getElementById('val-az').innerHTML = `${latest.az?.toFixed(2) ?? '--'} <span class="card-unit">g</span>`;
         document.getElementById('record-count').textContent = `${globalData.length} / 150 Records`;
 
-        // Update Both Charts
         const labels = globalData.map((_, i) => i);
         const values = globalData.map(e => e.amag);
 
@@ -795,19 +785,16 @@
       link.click();
       document.body.removeChild(link);
 
-      // Save session summary to patient's history after exporting
       saveSessionToPatient(currentPatient);
     };
 
     // ---------- INITIALIZE ----------
     (async function init() {
       await loadPatients();
-      // If there are already patients, auto-select the first one
       if (patients.length > 0) {
         patientSelect.value = patientKey(patients[0].name, patients[0].id);
         await selectPatient(patients[0]);
       } else {
-        // No patients yet — show waiting
         noPatientMsg.style.display = 'flex';
         statusText.textContent = 'Add a patient to begin';
         statusBadge.className = 'status-badge waiting';
