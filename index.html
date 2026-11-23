@@ -81,6 +81,46 @@
     /* Main Layout */
     main { padding: 2rem; max-width: 1400px; margin: 0 auto; display: flex; flex-direction: column; gap: 1.5rem; }
 
+    /* Patient Selector Bar */
+    .patient-bar {
+      background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px;
+      padding: 1rem 1.5rem; display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;
+    }
+    .patient-bar label { font-size: 0.85rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.8px; }
+    .patient-select {
+      background: #1e2a42; color: var(--text-main); border: 1px solid var(--border);
+      padding: 10px 16px; border-radius: 8px; font-size: 0.95rem; font-family: 'Inter', sans-serif;
+      min-width: 220px; cursor: pointer; outline: none; transition: border-color 0.2s;
+    }
+    .patient-select:focus { border-color: var(--accent-cyan); }
+    .patient-input {
+      background: #1e2a42; color: var(--text-main); border: 1px solid var(--border);
+      padding: 10px 16px; border-radius: 8px; font-size: 0.95rem; font-family: 'Inter', sans-serif;
+      width: 200px; outline: none; transition: border-color 0.2s;
+    }
+    .patient-input:focus { border-color: var(--accent-cyan); }
+    .patient-input::placeholder { color: #5a6a82; }
+
+    .btn-add-patient {
+      background: linear-gradient(135deg, var(--accent-blue), var(--accent-cyan));
+      color: white; border: none; padding: 10px 20px; border-radius: 8px;
+      font-size: 0.9rem; font-weight: 600; cursor: pointer; transition: all 0.2s;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .btn-add-patient:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4); }
+
+    .patient-active-badge {
+      display: flex; align-items: center; gap: 8px; margin-left: auto;
+      background: rgba(6, 182, 212, 0.1); border: 1px solid rgba(6, 182, 212, 0.3);
+      padding: 8px 18px; border-radius: 999px; font-weight: 600; font-size: 0.9rem;
+      color: var(--accent-cyan);
+    }
+    .patient-active-badge .pid { color: var(--text-muted); font-weight: 400; font-size: 0.8rem; }
+
+    .no-patient-msg {
+      color: var(--warning); font-size: 0.9rem; display: flex; align-items: center; gap: 8px;
+    }
+
     .grid-top { display: grid; grid-template-columns: 1fr 1fr 1fr 2fr; gap: 1.5rem; }
     
     .card {
@@ -119,13 +159,27 @@
     .ai-bar { height: 100%; width: 0%; background: linear-gradient(90deg, var(--accent-cyan), var(--accent-purple)); border-radius: 10px; transition: width .35s; }
     .grid-bottom { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem; }
 
+    /* Progress / Comparison card */
+    .compare-card { border: 1px solid rgba(139,92,246,.35); background: linear-gradient(135deg, rgba(139,92,246,.08), rgba(59,130,246,.06)); }
+    .compare-card::before { background: linear-gradient(90deg, var(--accent-purple), var(--accent-blue)); }
+    .compare-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem; margin-top: 1rem; }
+    .compare-item { background: rgba(255,255,255,0.03); border-radius: 8px; padding: 1rem; }
+    .compare-item .label { font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 0.4rem; }
+    .compare-item .value { font-size: 1.3rem; font-weight: 700; }
+    .delta-up { color: var(--danger); }
+    .delta-down { color: var(--success); }
+    .delta-same { color: var(--text-muted); }
+
     @media (max-width: 1024px) {
       .grid-top { grid-template-columns: 1fr 1fr; }
       .grid-bottom { grid-template-columns: 1fr; }
+      .compare-grid { grid-template-columns: 1fr; }
     }
     @media (max-width: 600px) {
       .grid-top { grid-template-columns: 1fr; }
       header { flex-direction: column; gap: 1rem; text-align: center; }
+      .patient-bar { flex-direction: column; align-items: stretch; }
+      .patient-active-badge { margin-left: 0; }
     }
   </style>
 </head>
@@ -146,6 +200,25 @@
   </header>
 
   <main>
+    <!-- Patient Selector Bar -->
+    <div class="patient-bar">
+      <label for="patient-select">Patient</label>
+      <select id="patient-select" class="patient-select" onchange="onPatientChange()">
+        <option value="">— Select Patient —</option>
+      </select>
+      <input type="text" id="patient-name" class="patient-input" placeholder="Patient Name" />
+      <input type="text" id="patient-id" class="patient-input" placeholder="Patient ID" style="width: 160px;" />
+      <button class="btn-add-patient" onclick="addPatient()">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+        Add Patient
+      </button>
+      <div id="no-patient-msg" class="no-patient-msg">⚠️ Select or add a patient to begin recording</div>
+      <div id="active-patient-badge" class="patient-active-badge" style="display:none;">
+        <span id="active-patient-name"></span>
+        <span class="pid" id="active-patient-id"></span>
+      </div>
+    </div>
+
     <!-- Top Row: Real-time metrics -->
     <div class="grid-top">
       <div class="card blue">
@@ -184,6 +257,27 @@
       <div class="ai-bar-wrap"><div class="ai-bar" id="ai-confidence-bar"></div></div>
       <div class="ai-note" id="ai-model-status">Preparing neural network and feature extraction...</div>
       <div class="ai-note">Prototype classifier trained using synthetic feature examples. Not a medical diagnosis or validated clinical model.</div>
+    </div>
+
+    <!-- Previous Session Comparison / Progress -->
+    <div class="card compare-card" id="compare-card" style="display:none;">
+      <div class="card-title">
+        <span>📊 Session Comparison (Current vs Previous)</span>
+      </div>
+      <div class="compare-grid">
+        <div class="compare-item">
+          <div class="label">Tremor Index (RMS)</div>
+          <div class="value" id="compare-rms">--</div>
+        </div>
+        <div class="compare-item">
+          <div class="label">Dominant Frequency</div>
+          <div class="value" id="compare-freq">--</div>
+        </div>
+        <div class="compare-item">
+          <div class="label">AI Classification</div>
+          <div class="value" id="compare-class" style="font-size:1rem;">--</div>
+        </div>
+      </div>
     </div>
 
 
@@ -228,7 +322,7 @@
 
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-app.js";
-    import { getDatabase, ref, onValue, query, limitToLast } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-database.js";
+    import { getDatabase, ref, onValue, query, limitToLast, set, get, child } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-database.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyCMFhfjnGO4waR7Uata_jBeYAW8SqAKAp0",
@@ -254,13 +348,274 @@
     let aiConfidence = 0;
     const AI_CLASSES = ['Stable / Low Activity', 'Mild Tremor Pattern', 'Moderate Tremor Pattern', 'High Tremor Pattern'];
 
-    // Train a demonstration neural network using synthetic feature samples.
-    // Replace this synthetic training set with clinically labeled data for research validation.
+    // Patient state
+    let currentPatient = null; // { name, id }
+    let patients = []; // [{ name, id }]
+    let previousSession = null; // { rms, freq, aiLabel, aiConfidence, date }
+    let patientDataListener = null;
+    let patientUnsubscribe = null;
+
+    // ---------- PATIENT MANAGEMENT ----------
+    const patientSelect = document.getElementById('patient-select');
+    const patientNameInput = document.getElementById('patient-name');
+    const patientIdInput = document.getElementById('patient-id');
+    const noPatientMsg = document.getElementById('no-patient-msg');
+    const activePatientBadge = document.getElementById('active-patient-badge');
+    const activePatientName = document.getElementById('active-patient-name');
+    const activePatientId = document.getElementById('active-patient-id');
+    const compareCard = document.getElementById('compare-card');
+
+    function patientKey(name, id) {
+      return `${name.trim().replace(/[^a-zA-Z0-9]/g, '_')}_${id.trim().replace(/[^a-zA-Z0-9]/g, '_')}`;
+    }
+
+    async function loadPatients() {
+      const patientsRef = ref(db, 'patients');
+      const snapshot = await get(patientsRef);
+      patients = [];
+      if (snapshot.exists()) {
+        const val = snapshot.val();
+        Object.values(val).forEach(p => patients.push({ name: p.name, id: p.id }));
+      }
+      renderPatientSelect();
+    }
+
+    function renderPatientSelect() {
+      const currentVal = currentPatient ? patientKey(currentPatient.name, currentPatient.id) : '';
+      patientSelect.innerHTML = '<option value="">— Select Patient —</option>';
+      patients.forEach(p => {
+        const opt = document.createElement('option');
+        opt.value = patientKey(p.name, p.id);
+        opt.textContent = `${p.name} (${p.id})`;
+        patientSelect.appendChild(opt);
+      });
+      if (currentVal) patientSelect.value = currentVal;
+    }
+
+    window.addPatient = async function() {
+      const name = patientNameInput.value.trim();
+      const id = patientIdInput.value.trim();
+      if (!name || !id) {
+        alert('Please enter both Patient Name and Patient ID.');
+        return;
+      }
+      const key = patientKey(name, id);
+      const exists = patients.find(p => patientKey(p.name, p.id) === key);
+      if (!exists) {
+        patients.push({ name, id });
+        await set(ref(db, `patients/${key}`), { name, id });
+      }
+      patientNameInput.value = '';
+      patientIdInput.value = '';
+      await loadPatients();
+      // Auto-select the new patient
+      patientSelect.value = key;
+      onPatientChange();
+    };
+
+    window.onPatientChange = async function() {
+      const key = patientSelect.value;
+      if (!key) {
+        clearPatient();
+        return;
+      }
+      const found = patients.find(p => patientKey(p.name, p.id) === key);
+      if (!found) return;
+      await selectPatient(found);
+    };
+
+    async function selectPatient(patient) {
+      // Unsubscribe previous listener
+      if (patientUnsubscribe) { patientUnsubscribe(); patientUnsubscribe = null; }
+      
+      currentPatient = patient;
+      noPatientMsg.style.display = 'none';
+      activePatientBadge.style.display = 'flex';
+      activePatientName.textContent = patient.name;
+      activePatientId.textContent = `#${patient.id}`;
+
+      // Load previous session summary
+      await loadPreviousSession(patient);
+
+      // Start listening to this patient's readings
+      startPatientListener(patient);
+    }
+
+    function clearPatient() {
+      if (patientUnsubscribe) { patientUnsubscribe(); patientUnsubscribe = null; }
+      currentPatient = null;
+      previousSession = null;
+      globalData = [];
+      noPatientMsg.style.display = 'flex';
+      activePatientBadge.style.display = 'none';
+      compareCard.style.display = 'none';
+      resetDashboard();
+      statusText.textContent = 'No Patient Selected';
+      statusBadge.className = 'status-badge waiting';
+    }
+
+    async function loadPreviousSession(patient) {
+      const key = patientKey(patient.name, patient.id);
+      try {
+        const sessionsRef = ref(db, `sessions/${key}`);
+        const snap = await get(sessionsRef);
+        if (snap.exists()) {
+          const sessions = snap.val();
+          const sessionList = Object.values(sessions).sort((a,b) => (b.savedAt||0) - (a.savedAt||0));
+          if (sessionList.length > 0) {
+            previousSession = sessionList[0];
+          } else {
+            previousSession = null;
+          }
+        } else {
+          previousSession = null;
+        }
+      } catch(e) {
+        console.warn('Could not load previous session:', e);
+        previousSession = null;
+      }
+      updateComparisonUI();
+    }
+
+    function updateComparisonUI() {
+      if (!previousSession) {
+        compareCard.style.display = 'none';
+        return;
+      }
+      compareCard.style.display = 'block';
+      const prevRms = previousSession.rms || 0;
+      const prevFreq = previousSession.freq || 0;
+      const prevClass = previousSession.aiLabel || 'N/A';
+
+      const rmsEl = document.getElementById('compare-rms');
+      const freqEl = document.getElementById('compare-freq');
+      const classEl = document.getElementById('compare-class');
+
+      if (currentRms > 0) {
+        const diff = currentRms - prevRms;
+        const cls = diff > 0.02 ? 'delta-up' : (diff < -0.02 ? 'delta-down' : 'delta-same');
+        const arrow = diff > 0.02 ? '↑' : (diff < -0.02 ? '↓' : '→');
+        rmsEl.innerHTML = `<span class="${cls}">${currentRms.toFixed(3)} g ${arrow} (prev: ${prevRms.toFixed(3)})</span>`;
+      } else {
+        rmsEl.innerHTML = `Prev: ${prevRms.toFixed(3)} g`;
+      }
+
+      if (currentFreq > 0) {
+        const diff = currentFreq - prevFreq;
+        const cls = diff > 0.3 ? 'delta-up' : (diff < -0.3 ? 'delta-down' : 'delta-same');
+        const arrow = diff > 0.3 ? '↑' : (diff < -0.3 ? '↓' : '→');
+        freqEl.innerHTML = `<span class="${cls}">${currentFreq.toFixed(1)} Hz ${arrow} (prev: ${prevFreq.toFixed(1)})</span>`;
+      } else {
+        freqEl.innerHTML = `Prev: ${prevFreq.toFixed(1)} Hz`;
+      }
+
+      classEl.innerHTML = `Prev: ${prevClass}`;
+      if (aiPredictionLabel && aiPredictionLabel !== 'Model not ready') {
+        classEl.innerHTML += `<br><span style="font-size:0.8rem;color:var(--accent-cyan);">Now: ${aiPredictionLabel}</span>`;
+      }
+    }
+
+    async function saveSessionToPatient(patient) {
+      if (!patient || globalData.length < 10) return;
+      const key = patientKey(patient.name, patient.id);
+      const sessionId = 'session_' + Date.now();
+      const sessionSummary = {
+        savedAt: Date.now(),
+        rms: currentRms,
+        freq: currentFreq,
+        aiLabel: aiPredictionLabel,
+        aiConfidence: aiConfidence,
+        recordCount: globalData.length,
+        date: new Date().toISOString()
+      };
+      try {
+        await set(ref(db, `sessions/${key}/${sessionId}`), sessionSummary);
+        // Update previousSession reference so comparison refreshes
+        await loadPreviousSession(patient);
+      } catch(e) {
+        console.warn('Could not save session summary:', e);
+      }
+    }
+
+    function startPatientListener(patient) {
+      const key = patientKey(patient.name, patient.id);
+      const readingsRef = query(ref(db, `readings/${key}`), limitToLast(150));
+
+      patientUnsubscribe = onValue(readingsRef, (snapshot) => {
+        const data = snapshot.val();
+        if (!data) {
+          // No data yet for this patient — reset but keep patient selected
+          globalData = [];
+          resetDashboard();
+          statusText.textContent = 'Waiting for Data';
+          statusBadge.className = 'status-badge waiting';
+          return;
+        }
+
+        globalData = Object.entries(data).map(([k, v]) => ({ key: k, ...v })).sort((a, b) => (a.ts || 0) - (b.ts || 0));
+        if (globalData.length === 0) return;
+
+        statusText.textContent = 'Live Session Active';
+        statusBadge.className = 'status-badge';
+
+        const latest = globalData[globalData.length - 1];
+
+        // Update Values
+        document.getElementById('val-amag').innerHTML = `${latest.amag?.toFixed(3) ?? '--'} <span class="card-unit">g</span>`;
+        document.getElementById('val-ax').innerHTML = `${latest.ax?.toFixed(2) ?? '--'} <span class="card-unit">g</span>`;
+        document.getElementById('val-ay').innerHTML = `${latest.ay?.toFixed(2) ?? '--'} <span class="card-unit">g</span>`;
+        document.getElementById('val-az').innerHTML = `${latest.az?.toFixed(2) ?? '--'} <span class="card-unit">g</span>`;
+        document.getElementById('record-count').textContent = `${globalData.length} / 150 Records`;
+
+        // Update Both Charts
+        const labels = globalData.map((_, i) => i);
+        const values = globalData.map(e => e.amag);
+
+        realtimeChart.data.labels = labels;
+        realtimeChart.data.datasets[0].data = values;
+        realtimeChart.update('none');
+
+        historyChart.data.labels = labels;
+        historyChart.data.datasets[0].data = values;
+        historyChart.update('none');
+
+        calculateAdvancedMetrics(globalData);
+      }, (error) => {
+        console.error('Firebase read error for patient:', error);
+        statusText.textContent = 'Connection Error';
+        statusBadge.className = 'status-badge error';
+      });
+    }
+
+    function resetDashboard() {
+      document.getElementById('val-amag').innerHTML = `-- <span class="card-unit">g</span>`;
+      document.getElementById('val-ax').innerHTML = `-- <span class="card-unit">g</span>`;
+      document.getElementById('val-ay').innerHTML = `-- <span class="card-unit">g</span>`;
+      document.getElementById('val-az').innerHTML = `-- <span class="card-unit">g</span>`;
+      document.getElementById('val-tsi').innerHTML = `-- <span class="card-unit">g</span>`;
+      document.getElementById('val-freq').innerHTML = `-- <span class="card-unit">Hz</span>`;
+      document.getElementById('val-severity').innerHTML = `<span class="badge">Waiting</span>`;
+      document.getElementById('record-count').textContent = `0 / 150 Records`;
+      document.getElementById('ai-prediction').textContent = 'Waiting for patient data...';
+      document.getElementById('ai-confidence').textContent = '--%';
+      document.getElementById('ai-confidence-bar').style.width = '0%';
+      realtimeChart.data.labels = [];
+      realtimeChart.data.datasets[0].data = [];
+      realtimeChart.update('none');
+      historyChart.data.labels = [];
+      historyChart.data.datasets[0].data = [];
+      historyChart.update('none');
+      currentRms = 0;
+      currentFreq = 0;
+      aiPredictionLabel = 'Model not ready';
+      aiConfidence = 0;
+    }
+
+    // ---------- TENSORFLOW MODEL ----------
     function randomBetween(min, max) { return min + Math.random() * (max - min); }
     function makeSyntheticTrainingData(samplesPerClass = 300) {
       const xs = [], ys = [];
       const ranges = [
-        // [RMS g, peak-rate Hz, magnitude variability g, axis variability g, gyro RMS dps]
         [[0.75,1.02],[0.1,2.0],[0.02,0.15],[0.02,0.15],[0,15]],
         [[1.00,1.20],[2.0,4.0],[0.12,0.32],[0.10,0.30],[10,65]],
         [[1.15,1.40],[4.0,7.0],[0.25,0.55],[0.25,0.60],[45,140]],
@@ -279,7 +634,7 @@
       const { xs, ys } = makeSyntheticTrainingData();
       const inputTensor = tf.tensor2d(xs);
       const labelsTensor = tf.tensor1d(ys, 'int32');
-          const outputTensor = tf.oneHot(labelsTensor, 4);
+      const outputTensor = tf.oneHot(labelsTensor, 4);
       const model = tf.sequential();
       model.add(tf.layers.dense({ inputShape: [5], units: 16, activation: 'relu' }));
       model.add(tf.layers.dropout({ rate: 0.12 }));
@@ -320,6 +675,7 @@
       document.getElementById('ai-confidence').textContent = aiConfidence.toFixed(1) + '%';
       document.getElementById('ai-confidence-bar').style.width = aiConfidence.toFixed(1) + '%';
       document.getElementById('ai-model-status').textContent = 'Features: RMS ' + rmsValue.toFixed(3) + ' g | Peak rate ' + freqValue.toFixed(2) + ' Hz | Mag SD ' + features[2].toFixed(3) + ' | Axis SD ' + features[3].toFixed(3) + ' | Gyro RMS ' + (features[4]*300).toFixed(1) + ' dps';
+      updateComparisonUI();
     }
     trainDemoModel().catch(err => {
       console.error('AI model training failed:', err);
@@ -327,7 +683,7 @@
       document.getElementById('ai-model-status').textContent = 'TensorFlow.js failed to train. Check browser support or network connection.';
     });
 
-    // Chart 1: Real-Time (Smooth, gradient fill)
+    // ---------- CHARTS ----------
     const rtCtx = document.getElementById('realtimeChart').getContext('2d');
     let rtGradient = rtCtx.createLinearGradient(0, 0, 0, 400);
     rtGradient.addColorStop(0, 'rgba(59, 130, 246, 0.4)');
@@ -343,7 +699,6 @@
       }
     });
 
-    // Chart 2: History (Spiky, clinical view of all data)
     const histCtx = document.getElementById('historyChart').getContext('2d');
     let historyChart = new Chart(histCtx, {
       type: 'line',
@@ -358,47 +713,9 @@
       }
     });
 
-    // Firebase Listener
-    const recentRef = query(ref(db, 'readings'), limitToLast(150));
-
-    onValue(recentRef, (snapshot) => {
-      const data = snapshot.val();
-      if (!data) return;
-
-      globalData = Object.entries(data).map(([key, v]) => ({ key, ...v })).sort((a, b) => (a.ts || 0) - (b.ts || 0));
-      if (globalData.length === 0) return;
-
-      statusText.textContent = 'Live Session Active';
-      statusBadge.className = 'status-badge';
-
-      const latest = globalData[globalData.length - 1];
-
-      // Update Values
-      document.getElementById('val-amag').innerHTML = `${latest.amag?.toFixed(3) ?? '--'} <span class="card-unit">g</span>`;
-      document.getElementById('val-ax').innerHTML = `${latest.ax?.toFixed(2) ?? '--'} <span class="card-unit">g</span>`;
-      document.getElementById('val-ay').innerHTML = `${latest.ay?.toFixed(2) ?? '--'} <span class="card-unit">g</span>`;
-      document.getElementById('val-az').innerHTML = `${latest.az?.toFixed(2) ?? '--'} <span class="card-unit">g</span>`;
-      document.getElementById('record-count').textContent = `${globalData.length} / 150 Records`;
-
-      // Update Both Charts
-      const labels = globalData.map((_, i) => i);
-      const values = globalData.map(e => e.amag);
-
-      realtimeChart.data.labels = labels;
-      realtimeChart.data.datasets[0].data = values;
-      realtimeChart.update('none');
-
-      historyChart.data.labels = labels;
-      historyChart.data.datasets[0].data = values;
-      historyChart.update('none');
-
-      calculateAdvancedMetrics(globalData);
-    });
-
     function calculateAdvancedMetrics(data) {
       if (data.length < 10) return;
 
-      // 1. RMS Calculation
       let sumSq = 0;
       data.forEach(d => sumSq += (d.amag * d.amag));
       currentRms = Math.sqrt(sumSq / data.length);
@@ -406,7 +723,6 @@
       document.getElementById('val-tsi').innerHTML = `${currentRms.toFixed(3)} <span class="card-unit">g</span>`;
       document.getElementById('val-severity').innerHTML = `<span class="badge">AI Pending</span>`;
 
-      // 2. Frequency Calculation
       let peaks = 0;
       const threshold = 0.05; 
       for (let i = 1; i < data.length - 1; i++) {
@@ -423,29 +739,41 @@
         if (aiPredictionLabel.includes('High')) badgeClass = 'high';
         else if (aiPredictionLabel.includes('Moderate')) badgeClass = 'moderate';
         document.getElementById('val-severity').innerHTML = `<span class="badge ${badgeClass}">${aiPredictionLabel}</span>`;
+        updateComparisonUI();
       }).catch(console.error);
     }
 
-    // CSV Export with Clinical Header
+    // ---------- CSV EXPORT (patient-specific) ----------
     window.exportToCSV = function() {
+      if (!currentPatient) {
+        alert("Please select a patient first.");
+        return;
+      }
       if (globalData.length === 0) {
-        alert("No data available to export.");
+        alert("No data available to export for this patient.");
         return;
       }
 
       let csvContent = "data:text/csv;charset=utf-8,";
       
-      // Clinical Session Summary
       csvContent += "--- CLINICAL TREMOR REPORT ---\n";
+      csvContent += `Patient Name,${currentPatient.name}\n`;
+      csvContent += `Patient ID,${currentPatient.id}\n`;
       csvContent += `Session Date,${new Date().toLocaleString()}\n`;
       csvContent += `Total Records,${globalData.length}\n`;
       csvContent += `Tremor Index (RMS),${currentRms.toFixed(3)} g\n`;
       csvContent += `Dominant Frequency,${currentFreq.toFixed(1)} Hz\n`;
       csvContent += `AI Classification,${aiPredictionLabel}\n`;
       csvContent += `AI Confidence,${aiConfidence.toFixed(1)}%\n`;
+      if (previousSession) {
+        csvContent += `--- Previous Session Comparison ---\n`;
+        csvContent += `Previous RMS,${previousSession.rms.toFixed(3)} g\n`;
+        csvContent += `Previous Frequency,${previousSession.freq.toFixed(1)} Hz\n`;
+        csvContent += `Previous Classification,${previousSession.aiLabel}\n`;
+        csvContent += `Previous Session Date,${new Date(previousSession.savedAt).toLocaleString()}\n`;
+      }
       csvContent += "------------------------------\n\n";
 
-      // Raw Data
       csvContent += "Timestamp(ms),Accel X(g),Accel Y(g),Accel Z(g),Magnitude(g),Gyro X(dps),Gyro Y(dps),Gyro Z(dps)\n";
 
       globalData.forEach(function(rowArray) {
@@ -460,11 +788,31 @@
       const encodedUri = encodeURI(csvContent);
       const link = document.createElement("a");
       link.setAttribute("href", encodedUri);
-      link.setAttribute("download", `tremor_session_${new Date().toISOString().slice(0,10)}.csv`);
+      const safeName = currentPatient.name.replace(/[^a-zA-Z0-9]/g, '_');
+      const safeId = currentPatient.id.replace(/[^a-zA-Z0-9]/g, '_');
+      link.setAttribute("download", `tremor_${safeName}_${safeId}_${new Date().toISOString().slice(0,10)}.csv`);
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
+
+      // Save session summary to patient's history after exporting
+      saveSessionToPatient(currentPatient);
     };
+
+    // ---------- INITIALIZE ----------
+    (async function init() {
+      await loadPatients();
+      // If there are already patients, auto-select the first one
+      if (patients.length > 0) {
+        patientSelect.value = patientKey(patients[0].name, patients[0].id);
+        await selectPatient(patients[0]);
+      } else {
+        // No patients yet — show waiting
+        noPatientMsg.style.display = 'flex';
+        statusText.textContent = 'Add a patient to begin';
+        statusBadge.className = 'status-badge waiting';
+      }
+    })();
   </script>
 </body>
 </html>
