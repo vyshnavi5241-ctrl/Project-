@@ -322,7 +322,7 @@
 
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-app.js";
-    import { getDatabase, ref, onValue, query, limitToLast, set, get } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-database.js";
+    import { getDatabase, ref, onValue, query, limitToLast, set, get, child } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-database.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyCMFhfjnGO4waR7Uata_jBeYAW8SqAKAp0",
@@ -349,10 +349,11 @@
     const AI_CLASSES = ['Stable / Low Activity', 'Mild Tremor Pattern', 'Moderate Tremor Pattern', 'High Tremor Pattern'];
 
     // Patient state
-    let currentPatient = null; // { name, id }
-    let patients = []; // [{ name, id }]
-    let previousSession = null; // { rms, freq, aiLabel, aiConfidence, date }
+    let currentPatient = null; 
+    let patients = []; 
+    let previousSession = null; 
     let patientUnsubscribe = null;
+    let liveDataUnsubscribe = null; // For the main hardware live data
 
     // ---------- PATIENT MANAGEMENT ----------
     const patientSelect = document.getElementById('patient-select');
@@ -433,10 +434,12 @@
 
       await loadPreviousSession(patient);
       startPatientListener(patient);
+      startMainLiveDataListener(patient); // Read from the root 'readings' node
     }
 
     function clearPatient() {
       if (patientUnsubscribe) { patientUnsubscribe(); patientUnsubscribe = null; }
+      if (liveDataUnsubscribe) { liveDataUnsubscribe(); liveDataUnsubscribe = null; }
       currentPatient = null;
       previousSession = null;
       globalData = [];
@@ -530,6 +533,7 @@
       }
     }
 
+    // Reads previously saved data for the selected patient
     function startPatientListener(patient) {
       const key = patientKey(patient.name, patient.id);
       const readingsRef = query(ref(db, `readings/${key}`), limitToLast(150));
@@ -537,14 +541,38 @@
       patientUnsubscribe = onValue(readingsRef, (snapshot) => {
         const data = snapshot.val();
         if (!data) {
+          // If no historical patient data exists yet, we don't clear the live data
+          // The live data will populate the UI.
+          return;
+        }
+        // If there is historical data, we could optionally merge it or display it.
+        // For now, the mainLiveDataListener will take over the UI.
+      }, (error) => {
+        console.error('Firebase read error for patient history:', error);
+      });
+    }
+
+    // Reads the LIVE data coming directly from the pen under 'readings/'
+    function startMainLiveDataListener(patient) {
+      const key = patientKey(patient.name, patient.id);
+      const mainReadingsRef = query(ref(db, 'readings'), limitToLast(150));
+
+      liveDataUnsubscribe = onValue(mainReadingsRef, (snapshot) => {
+        const data = snapshot.val();
+        if (!data) {
           globalData = [];
           resetDashboard();
-          statusText.textContent = 'Waiting for Data';
+          statusText.textContent = 'Waiting for Hardware Data';
           statusBadge.className = 'status-badge waiting';
           return;
         }
 
-        globalData = Object.entries(data).map(([k, v]) => ({ key: k, ...v })).sort((a, b) => (a.ts || 0) - (b.ts || 0));
+        // Data structure handling
+        globalData = Object.entries(data)
+          .filter(([k, v]) => v && typeof v === 'object' && v.amag !== undefined) // Ensure it's a reading object
+          .map(([k, v]) => ({ key: k, ...v }))
+          .sort((a, b) => (a.ts || 0) - (b.ts || 0));
+
         if (globalData.length === 0) return;
 
         statusText.textContent = 'Live Session Active';
@@ -552,6 +580,7 @@
 
         const latest = globalData[globalData.length - 1];
 
+        // Update UI
         document.getElementById('val-amag').innerHTML = `${latest.amag?.toFixed(3) ?? '--'} <span class="card-unit">g</span>`;
         document.getElementById('val-ax').innerHTML = `${latest.ax?.toFixed(2) ?? '--'} <span class="card-unit">g</span>`;
         document.getElementById('val-ay').innerHTML = `${latest.ay?.toFixed(2) ?? '--'} <span class="card-unit">g</span>`;
@@ -571,7 +600,7 @@
 
         calculateAdvancedMetrics(globalData);
       }, (error) => {
-        console.error('Firebase read error for patient:', error);
+        console.error('Firebase live read error:', error);
         statusText.textContent = 'Connection Error';
         statusBadge.className = 'status-badge error';
       });
@@ -784,6 +813,17 @@
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
+
+      // Save to Firebase under the patient's specific node
+      const key = patientKey(currentPatient.name, currentPatient.id);
+      globalData.forEach(async (row) => {
+        if (!row.key) return; 
+        // Move the live data to the patient's specific folder
+        await set(ref(db, `readings/${key}/${row.key}`), {
+          ts: row.ts, ax: row.ax, ay: row.ay, az: row.az, amag: row.amag,
+          gx: row.gx, gy: row.gy, gz: row.gz
+        });
+      });
 
       saveSessionToPatient(currentPatient);
     };
