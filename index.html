@@ -35,7 +35,6 @@
       min-height: 100vh;
     }
 
-    /* Header */
     header {
       background: var(--bg-glass);
       backdrop-filter: blur(12px);
@@ -54,7 +53,6 @@
     
     .header-controls { display: flex; align-items: center; gap: 1.5rem; }
 
-    /* Big Download Button */
     .btn-export {
       background: linear-gradient(135deg, #10b981, #059669);
       color: white; border: none;
@@ -78,10 +76,8 @@
     .dot { width: 8px; height: 8px; background: currentColor; border-radius: 50%; animation: pulse 2s infinite; }
     @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(16,185,129,0.4); } 70% { box-shadow: 0 0 0 8px rgba(16,185,129,0); } 100% { box-shadow: 0 0 0 0 rgba(16,185,129,0); } }
 
-    /* Main Layout */
     main { padding: 2rem; max-width: 1400px; margin: 0 auto; display: flex; flex-direction: column; gap: 1.5rem; }
 
-    /* Patient Selector Bar */
     .patient-bar {
       background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px;
       padding: 1rem 1.5rem; display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;
@@ -128,7 +124,6 @@
       padding: 1.5rem; box-shadow: 0 4px 20px rgba(0,0,0,0.2); position: relative; overflow: hidden;
     }
 
-    /* Decorators */
     .card::before { content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 3px; }
     .card.blue::before { background: var(--accent-blue); }
     .card.cyan::before { background: var(--accent-cyan); }
@@ -144,7 +139,6 @@
     .badge.moderate { background: rgba(245, 158, 11, 0.2); color: var(--warning); }
     .badge.high { background: rgba(239, 68, 68, 0.2); color: var(--danger); }
 
-    /* Chart Areas */
     .chart-card { min-height: 350px; display: flex; flex-direction: column; }
     .chart-container { flex: 1; position: relative; width: 100%; margin-top: 1rem; }
 
@@ -159,7 +153,6 @@
     .ai-bar { height: 100%; width: 0%; background: linear-gradient(90deg, var(--accent-cyan), var(--accent-purple)); border-radius: 10px; transition: width .35s; }
     .grid-bottom { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem; }
 
-    /* Progress / Comparison card */
     .compare-card { border: 1px solid rgba(139,92,246,.35); background: linear-gradient(135deg, rgba(139,92,246,.08), rgba(59,130,246,.06)); }
     .compare-card::before { background: linear-gradient(90deg, var(--accent-purple), var(--accent-blue)); }
     .compare-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem; margin-top: 1rem; }
@@ -200,7 +193,6 @@
   </header>
 
   <main>
-    <!-- Patient Selector Bar -->
     <div class="patient-bar">
       <label for="patient-select">Patient</label>
       <select id="patient-select" class="patient-select" onchange="onPatientChange()">
@@ -219,7 +211,6 @@
       </div>
     </div>
 
-    <!-- Top Row: Real-time metrics -->
     <div class="grid-top">
       <div class="card blue">
         <div class="card-title">Magnitude |A|</div>
@@ -241,8 +232,6 @@
       </div>
     </div>
 
-
-    <!-- AI Tremor Classification Panel -->
     <div class="card ai-card">
       <div class="ai-row">
         <div>
@@ -259,7 +248,6 @@
       <div class="ai-note">Prototype classifier trained using synthetic feature examples. Not a medical diagnosis or validated clinical model.</div>
     </div>
 
-    <!-- Previous Session Comparison / Progress -->
     <div class="card compare-card" id="compare-card" style="display:none;">
       <div class="card-title">
         <span>📊 Session Comparison (Current vs Previous)</span>
@@ -280,8 +268,6 @@
       </div>
     </div>
 
-
-    <!-- Real-time Graph -->
     <div class="card chart-card">
       <div class="card-title">
         <span>Real-Time Amplitude Trace (Live)</span>
@@ -292,7 +278,6 @@
       </div>
     </div>
 
-    <!-- Full Historical Graph -->
     <div class="card chart-card" style="min-height: 400px;">
       <div class="card-title">
         <span>Full Session History (All 150 Records)</span>
@@ -303,7 +288,6 @@
       </div>
     </div>
 
-    <!-- Detailed Axis Data -->
     <div class="grid-bottom">
       <div class="card">
         <div class="card-title">Accelerometer X</div>
@@ -348,17 +332,14 @@
     let aiConfidence = 0;
     const AI_CLASSES = ['Stable / Low Activity', 'Mild Tremor Pattern', 'Moderate Tremor Pattern', 'High Tremor Pattern'];
 
-    // Patient state
     let currentPatient = null; 
     let patients = []; 
     let previousSession = null; 
     let patientUnsubscribe = null;
     let liveDataUnsubscribe = null; 
     
-    // 🟢 NEW: Keep track of when the patient was selected. We only show data after this time.
     let sessionStartTime = 0; 
 
-    // ---------- PATIENT MANAGEMENT ----------
     const patientSelect = document.getElementById('patient-select');
     const patientNameInput = document.getElementById('patient-name');
     const patientIdInput = document.getElementById('patient-id');
@@ -436,10 +417,8 @@
       activePatientName.textContent = patient.name;
       activePatientId.textContent = `#${patient.id}`;
 
-      // 🟢 Set the session start time to NOW. Only data timestamped after this will be shown.
       sessionStartTime = Date.now();
 
-      // Clear current screen immediately
       globalData = [];
       resetDashboard();
 
@@ -543,9 +522,8 @@
       }
     }
 
-    // Reads the LIVE data coming directly from the pen under 'readings/'
     function startMainLiveDataListener(patient) {
-      const mainReadingsRef = query(ref(db, 'readings'), limitToLast(150));
+      const mainReadingsRef = query(ref(db, 'readings'), limitToLast(100));
 
       liveDataUnsubscribe = onValue(mainReadingsRef, (snapshot) => {
         const data = snapshot.val();
@@ -557,29 +535,44 @@
           return;
         }
 
-        // 🟢 CRITICAL CHANGE: Filter data. Only keep readings that happened AFTER the patient was selected.
-        globalData = Object.entries(data)
-          .filter(([k, v]) => {
-            if (!v || typeof v !== 'object' || v.amag === undefined) return false;
-            // Check if the timestamp of this reading is greater than or equal to sessionStartTime
-            return v.ts && v.ts >= sessionStartTime;
-          })
+        // Parse and sort all live data
+        const allReadings = Object.entries(data)
+          .filter(([k, v]) => v && typeof v === 'object' && v.amag !== undefined)
           .map(([k, v]) => ({ key: k, ...v }))
           .sort((a, b) => (a.ts || 0) - (b.ts || 0));
 
+        // Filter data to ONLY include readings that came AFTER the patient was selected
+        globalData = allReadings.filter(r => r.ts && r.ts >= sessionStartTime);
+
         if (globalData.length === 0) {
-          // If no new data yet, just wait
+          // No new data yet since selecting the patient
           statusText.textContent = 'Waiting for Pen to Start...';
           statusBadge.className = 'status-badge waiting';
+          
+          // Keep dashboard blank
+          document.getElementById('val-amag').innerHTML = `-- <span class="card-unit">g</span>`;
+          document.getElementById('val-ax').innerHTML = `-- <span class="card-unit">g</span>`;
+          document.getElementById('val-ay').innerHTML = `-- <span class="card-unit">g</span>`;
+          document.getElementById('val-az').innerHTML = `-- <span class="card-unit">g</span>`;
+          document.getElementById('record-count').textContent = `0 / 150 Records`;
+          
+          realtimeChart.data.labels = [];
+          realtimeChart.data.datasets[0].data = [];
+          realtimeChart.update('none');
+          
+          historyChart.data.labels = [];
+          historyChart.data.datasets[0].data = [];
+          historyChart.update('none');
+          
           return;
         }
 
+        // We have new data!
         statusText.textContent = 'Live Session Active';
         statusBadge.className = 'status-badge';
 
         const latest = globalData[globalData.length - 1];
 
-        // Update UI
         document.getElementById('val-amag').innerHTML = `${latest.amag?.toFixed(3) ?? '--'} <span class="card-unit">g</span>`;
         document.getElementById('val-ax').innerHTML = `${latest.ax?.toFixed(2) ?? '--'} <span class="card-unit">g</span>`;
         document.getElementById('val-ay').innerHTML = `${latest.ay?.toFixed(2) ?? '--'} <span class="card-unit">g</span>`;
@@ -600,7 +593,7 @@
         calculateAdvancedMetrics(globalData);
       }, (error) => {
         console.error('Firebase live read error:', error);
-        statusText.textContent = 'Connection Error';
+        statusText.textContent = 'Connection Error / Permission Denied';
         statusBadge.className = 'status-badge error';
       });
     }
@@ -629,7 +622,6 @@
       aiConfidence = 0;
     }
 
-    // ---------- TENSORFLOW MODEL ----------
     function randomBetween(min, max) { return min + Math.random() * (max - min); }
     function makeSyntheticTrainingData(samplesPerClass = 300) {
       const xs = [], ys = [];
@@ -701,7 +693,6 @@
       document.getElementById('ai-model-status').textContent = 'TensorFlow.js failed to train. Check browser support or network connection.';
     });
 
-    // ---------- CHARTS ----------
     const rtCtx = document.getElementById('realtimeChart').getContext('2d');
     let rtGradient = rtCtx.createLinearGradient(0, 0, 0, 400);
     rtGradient.addColorStop(0, 'rgba(59, 130, 246, 0.4)');
@@ -761,7 +752,6 @@
       }).catch(console.error);
     }
 
-    // ---------- CSV EXPORT ----------
     window.exportToCSV = function() {
       if (!currentPatient) {
         alert("Please select a patient first.");
@@ -813,7 +803,6 @@
       link.click();
       document.body.removeChild(link);
 
-      // 🟢 Save this new session's data permanently to the patient's specific folder
       const key = patientKey(currentPatient.name, currentPatient.id);
       globalData.forEach(async (row) => {
         if (!row.key) return; 
@@ -826,7 +815,6 @@
       saveSessionToPatient(currentPatient);
     };
 
-    // ---------- INITIALIZE ----------
     (async function init() {
       await loadPatients();
       if (patients.length > 0) {
