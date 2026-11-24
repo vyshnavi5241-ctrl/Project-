@@ -523,11 +523,15 @@
     }
 
     function startMainLiveDataListener(patient) {
-      const mainReadingsRef = query(ref(db, 'readings'), limitToLast(100));
+      // Listen to the complete readings node. The hardware currently writes
+      // readings at /readings, while CSV export also archives them under
+      // /readings/{patientKey}/{readingKey}.
+      const mainReadingsRef = ref(db, 'readings');
 
       liveDataUnsubscribe = onValue(mainReadingsRef, (snapshot) => {
-        const data = snapshot.val();
-        if (!data) {
+        const root = snapshot.val();
+
+        if (!root || typeof root !== 'object') {
           globalData = [];
           resetDashboard();
           statusText.textContent = 'Waiting for Hardware Data';
@@ -535,52 +539,102 @@
           return;
         }
 
-        // Parse and sort all live data
-        const allReadings = Object.entries(data)
-          .filter(([k, v]) => v && typeof v === 'object' && v.amag !== undefined)
-          .map(([k, v]) => ({ key: k, ...v }))
-          .sort((a, b) => (a.ts || 0) - (b.ts || 0));
+        const selectedKey = patientKey(patient.name, patient.id);
+        const collected = [];
 
-        // Filter data to ONLY include readings that came AFTER the patient was selected
-        globalData = allReadings.filter(r => r.ts && r.ts >= sessionStartTime);
+        const normalizeReading = (key, value, sourcePatientKey = null) => {
+          if (!value || typeof value !== 'object' ||
+              value.amag === undefined || value.amag === null) return;
+
+          const numberOrNull = (v) => {
+            if (v === undefined || v === null || v === '') return null;
+            const n = Number(v);
+            return Number.isFinite(n) ? n : null;
+          };
+
+          let timestamp = numberOrNull(value.ts);
+          // Accept Unix seconds as well as JavaScript milliseconds.
+          if (timestamp !== null && timestamp > 0 && timestamp < 1e12) {
+            timestamp *= 1000;
+          }
+
+          collected.push({
+            key,
+            patientKey: sourcePatientKey,
+            ts: timestamp || Date.now(),
+            ax: numberOrNull(value.ax) ?? 0,
+            ay: numberOrNull(value.ay) ?? 0,
+            az: numberOrNull(value.az) ?? 0,
+            amag: numberOrNull(value.amag) ?? 0,
+            gx: numberOrNull(value.gx) ?? 0,
+            gy: numberOrNull(value.gy) ?? 0,
+            gz: numberOrNull(value.gz) ?? 0
+          });
+        };
+
+        Object.entries(root).forEach(([key, value]) => {
+          if (!value || typeof value !== 'object') return;
+
+          // Flat hardware format:
+          // /readings/{readingId}/{ax, ay, az, amag, ts, ...}
+          if (value.amag !== undefined) {
+            normalizeReading(key, value, value.patientKey || value.patientId || null);
+            return;
+          }
+
+          // Nested archive format:
+          // /readings/{patientKey}/{readingId}/{ax, ay, az, amag, ts, ...}
+          Object.entries(value).forEach(([childKey, childValue]) => {
+            normalizeReading(childKey, childValue, key);
+          });
+        });
+
+        // Prefer this patient's archived records. Flat hardware records do
+        // not contain a patient ID, so they are treated as the active
+        // patient's live stream.
+        const patientArchived = collected.filter(r => r.patientKey === selectedKey);
+        const unassignedLive = collected.filter(r => !r.patientKey);
+
+        // Combine this patient's archived records with the current flat
+        // hardware stream. Deduplicate records that may have been copied
+        // into the patient archive during a previous CSV export.
+        const uniqueReadings = new Map();
+        [...patientArchived, ...unassignedLive].forEach(r => {
+          uniqueReadings.set(`${r.key}_${r.ts}`, r);
+        });
+        const patientReadings = Array.from(uniqueReadings.values());
+
+        // Do not compare device timestamps against the browser's patient
+        // selection time. That comparison was hiding valid Firebase records.
+        patientReadings.sort((a, b) => a.ts - b.ts);
+        globalData = patientReadings.slice(-150);
 
         if (globalData.length === 0) {
-          // No new data yet since selecting the patient
-          statusText.textContent = 'Waiting for Pen to Start...';
+          statusText.textContent = 'No readings found for this patient';
           statusBadge.className = 'status-badge waiting';
-          
-          // Keep dashboard blank
-          document.getElementById('val-amag').innerHTML = `-- <span class="card-unit">g</span>`;
-          document.getElementById('val-ax').innerHTML = `-- <span class="card-unit">g</span>`;
-          document.getElementById('val-ay').innerHTML = `-- <span class="card-unit">g</span>`;
-          document.getElementById('val-az').innerHTML = `-- <span class="card-unit">g</span>`;
-          document.getElementById('record-count').textContent = `0 / 150 Records`;
-          
-          realtimeChart.data.labels = [];
-          realtimeChart.data.datasets[0].data = [];
-          realtimeChart.update('none');
-          
-          historyChart.data.labels = [];
-          historyChart.data.datasets[0].data = [];
-          historyChart.update('none');
-          
+          resetDashboard();
           return;
         }
 
-        // We have new data!
-        statusText.textContent = 'Live Session Active';
+        statusText.textContent = 'Live Data Connected';
         statusBadge.className = 'status-badge';
 
         const latest = globalData[globalData.length - 1];
 
-        document.getElementById('val-amag').innerHTML = `${latest.amag?.toFixed(3) ?? '--'} <span class="card-unit">g</span>`;
-        document.getElementById('val-ax').innerHTML = `${latest.ax?.toFixed(2) ?? '--'} <span class="card-unit">g</span>`;
-        document.getElementById('val-ay').innerHTML = `${latest.ay?.toFixed(2) ?? '--'} <span class="card-unit">g</span>`;
-        document.getElementById('val-az').innerHTML = `${latest.az?.toFixed(2) ?? '--'} <span class="card-unit">g</span>`;
-        document.getElementById('record-count').textContent = `${globalData.length} / 150 Records`;
+        document.getElementById('val-amag').innerHTML =
+          `${latest.amag.toFixed(3)} <span class="card-unit">g</span>`;
+        document.getElementById('val-ax').innerHTML =
+          `${latest.ax.toFixed(2)} <span class="card-unit">g</span>`;
+        document.getElementById('val-ay').innerHTML =
+          `${latest.ay.toFixed(2)} <span class="card-unit">g</span>`;
+        document.getElementById('val-az').innerHTML =
+          `${latest.az.toFixed(2)} <span class="card-unit">g</span>`;
 
-        const labels = globalData.map((_, i) => i);
-        const values = globalData.map(e => e.amag);
+        document.getElementById('record-count').textContent =
+          `${globalData.length} / 150 Records`;
+
+        const labels = globalData.map((_, i) => i + 1);
+        const values = globalData.map(r => r.amag);
 
         realtimeChart.data.labels = labels;
         realtimeChart.data.datasets[0].data = values;
@@ -591,9 +645,13 @@
         historyChart.update('none');
 
         calculateAdvancedMetrics(globalData);
+
+        console.log('[Firebase] Total parsed readings:', collected.length);
+        console.log('[Firebase] Readings displayed:', globalData.length);
+        console.log('[Firebase] Latest reading:', latest);
       }, (error) => {
         console.error('Firebase live read error:', error);
-        statusText.textContent = 'Connection Error / Permission Denied';
+        statusText.textContent = `Firebase Error: ${error.code || error.message}`;
         statusBadge.className = 'status-badge error';
       });
     }
@@ -775,8 +833,8 @@
       csvContent += `AI Confidence,${aiConfidence.toFixed(1)}%\n`;
       if (previousSession) {
         csvContent += `--- Previous Session Comparison ---\n`;
-        csvContent += `Previous RMS,${previousSession.rms.toFixed(3)} g\n`;
-        csvContent += `Previous Frequency,${previousSession.freq.toFixed(1)} Hz\n`;
+        csvContent += `Previous RMS,${Number(previousSession.rms || 0).toFixed(3)} g\n`;
+        csvContent += `Previous Frequency,${Number(previousSession.freq || 0).toFixed(1)} Hz\n`;
         csvContent += `Previous Classification,${previousSession.aiLabel}\n`;
         csvContent += `Previous Session Date,${new Date(previousSession.savedAt).toLocaleString()}\n`;
       }
